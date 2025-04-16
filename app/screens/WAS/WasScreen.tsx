@@ -1,3 +1,4 @@
+/* eslint-disable indent */
 import 'react-native-get-random-values';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Button, Linking, ScrollView, Alert } from 'react-native';
@@ -11,6 +12,7 @@ import { navigationRef } from '../../navigation';
 import { Ed25519Signer } from '@did.coop/did-key-ed25519';
 import { WalletStorage } from '@did.coop/wallet-attached-storage';
 import { styles } from '../../styles/WasScreen';
+import { v4 as uuidv4 } from 'uuid';
 
 // For QR code scanning
 if (typeof btoa === 'undefined') {
@@ -23,6 +25,7 @@ const WASScreen = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [resumeData, setResumeData] = useState();
   const [storedSuccessfully, setStoredSuccessfully] = useState(false);
+  const [confirmingSession, setConfirmingSession] = useState(false);
   const [error, setError] = useState('');
   const [rawQRData, setRawQRData] = useState('');
   const devices = useCameraDevices();
@@ -151,16 +154,38 @@ const WASScreen = () => {
   const processResumeData = async (payload: any) => {
     try {
       setResumeData(payload);
-      const result = await storeResumeInWAS(payload);
 
-      if (result.success) {
-        setStoredSuccessfully(true);
+      // Extract authentication details
+      const { sessionId, token } = payload;
+
+      if (sessionId && token) {
+        setConfirmingSession(true);
+
+        const result = await storeResumeInWAS(payload);
+
+        if (result.success) {
+          setStoredSuccessfully(true);
+
+          // TODO Confirm authentication with the web app
+        } else {
+          setError(result.error);
+        }
+
+        setConfirmingSession(false);
       } else {
-        setError(result.error);
+        // Legacy flow without tokens
+        const result = await storeResumeInWAS(payload);
+
+        if (result.success) {
+          setStoredSuccessfully(true);
+        } else {
+          setError(result.error);
+        }
       }
     } catch (error: any) {
       console.error('Error storing resume:', error);
       setError('Failed to store resume: ' + error.message);
+      setConfirmingSession(false);
     }
   };
 
@@ -172,6 +197,7 @@ const WASScreen = () => {
       const space = await WalletStorage.provisionSpace({
         url: 'https://data.pub',
         signer: appDidSigner,
+        id: `urn:uuid:${uuidv4()}`,
       });
 
       const spaceObject = {
@@ -195,7 +221,6 @@ const WASScreen = () => {
 
       console.log('Resume stored successfully in WAS:', resourceName);
 
-      // Retrieve the resource to verify
       console.log('About to GET resource from path:', resource.path);
       const response = await resource.get({
         signer: appDidSigner,
@@ -290,7 +315,9 @@ const WASScreen = () => {
             ) : resumeData ? (
               <ScrollView style={styles.dataContainer}>
                 <Text style={styles.successText}>
-                  {storedSuccessfully
+                  {confirmingSession
+                    ? '⏳ Confirming with web application...'
+                    : storedSuccessfully
                     ? '✅ Resume successfully stored in your wallet!'
                     : 'Processing resume...'}
                 </Text>
