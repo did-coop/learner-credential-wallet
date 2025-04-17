@@ -8,6 +8,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    color: 'white',
   },
   cameraContainer: { flex: 1 },
   scanner: { flex: 1 },
@@ -20,11 +21,13 @@ export const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 20,
     textAlign: 'center',
+    color: 'white',
   },
   dataContainer: {
     flex: 1,
     width: '100%',
     padding: 10,
+    color: 'white',
   },
   successText: {
     fontSize: 18,
@@ -37,6 +40,7 @@ export const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: 'white',
   },
   dataItem: {
     fontSize: 16,

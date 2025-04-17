@@ -14,7 +14,6 @@ import { WalletStorage } from '@did.coop/wallet-attached-storage';
 import { styles } from '../../styles/WasScreen';
 import { v4 as uuidv4 } from 'uuid';
 
-// For QR code scanning
 if (typeof btoa === 'undefined') {
   globalThis.btoa = (str: any) => Buffer.from(str, 'binary').toString('base64');
 }
@@ -55,41 +54,6 @@ const WASScreen = () => {
               }. Raw payload: ${decodedPayload.substring(0, 50)}...`
             );
             return;
-          }
-        } else {
-          // Try to handle potential URL encoding or other formats
-          let dataToProcess = qrData;
-
-          // Check if it might be URL encoded
-          if (qrData.includes('%')) {
-            try {
-              dataToProcess = decodeURIComponent(qrData);
-              console.log('URL Decoded:', dataToProcess);
-            } catch (decodeErr) {
-              console.log('Not URL encoded, proceeding with raw data');
-            }
-          }
-
-          try {
-            payload = JSON.parse(dataToProcess);
-          } catch (parseError: any) {
-            console.error('JSON parse error for direct data:', parseError);
-
-            // If we can't parse as JSON, try to treat it as a plain resume ID string
-            if (
-              typeof dataToProcess === 'string' &&
-              dataToProcess.trim() !== ''
-            ) {
-              payload = { resumeId: dataToProcess.trim() };
-              console.log('Created simple payload with resumeId:', payload);
-            } else {
-              setError(
-                `Failed to parse QR code data: ${
-                  parseError.message
-                }. Raw data: ${dataToProcess.substring(0, 50)}...`
-              );
-              return;
-            }
           }
         }
 
@@ -151,36 +115,99 @@ const WASScreen = () => {
     }
   };
 
+  const confirmAuthentication = async (
+    sessionId: string,
+    token: string,
+    appOrigin: string,
+    result: any
+  ) => {
+    try {
+      const serverUrl = 'http://192.168.1.9:3000'; // TODO: Replace with your server URL
+      const confirmUrl = `${serverUrl}/api/lcw/confirm`;
+
+      console.log(`Confirming authentication with ${confirmUrl}`);
+
+      const verificationData = {
+        sessionId,
+        token,
+        resumeData: {
+          wasResourceName: result.resourceName,
+          wasStorageTimestamp: new Date().toISOString(),
+          storedSuccessfully: true,
+        },
+      };
+
+      const response = await fetch(confirmUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(verificationData),
+      });
+      console.log(`Response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Server responded with status ${response.status}: ${errorText}`
+        );
+      }
+
+      const responseData = await response.json();
+      console.log('Authentication confirmed successfully:', responseData);
+
+      return true;
+    } catch (error) {
+      console.error('Error confirming authentication:', JSON.stringify(error));
+      throw error;
+    }
+  };
+
   const processResumeData = async (payload: any) => {
     try {
       setResumeData(payload);
-
-      // Extract authentication details
-      const { sessionId, token } = payload;
+      const { sessionId, token, appOrigin } = payload;
 
       if (sessionId && token) {
         setConfirmingSession(true);
 
-        const result = await storeResumeInWAS(payload);
+        try {
+          // store the resume data in WAS
+          const result = await storeResumeInWAS(payload);
 
-        if (result.success) {
-          setStoredSuccessfully(true);
+          if (result.success) {
+            setStoredSuccessfully(true);
 
-          // TODO Confirm authentication with the web app
-        } else {
-          setError(result.error);
+            // confirm authentication with the web app
+            const confirmed = await confirmAuthentication(
+              sessionId,
+              token,
+              appOrigin,
+              {
+                ...result,
+                didController: result.didController,
+              }
+            );
+
+            if (confirmed) {
+              console.log('Backend authentication confirmed successfully');
+            }
+          } else {
+            setError(result.error);
+          }
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setConfirmingSession(false);
         }
-
-        setConfirmingSession(false);
       } else {
-        // Legacy flow without tokens
-        const result = await storeResumeInWAS(payload);
-
-        if (result.success) {
-          setStoredSuccessfully(true);
-        } else {
-          setError(result.error);
-        }
+        // flow without tokens
+        // const result = await storeResumeInWAS(payload);
+        // if (result.success) {
+        //   setStoredSuccessfully(true);
+        // } else {
+        //   setError(result.error);
+        // }
       }
     } catch (error: any) {
       console.error('Error storing resume:', error);
@@ -221,27 +248,11 @@ const WASScreen = () => {
 
       console.log('Resume stored successfully in WAS:', resourceName);
 
-      console.log('About to GET resource from path:', resource.path);
-      const response = await resource.get({
-        signer: appDidSigner,
-      });
-
-      console.log('Resource GET Status code:', response.status);
-
-      if (response.ok) {
-        try {
-          if (response.blob) {
-            const blob = await response.blob();
-            const text = await new Response(blob).text();
-            console.log('Retrieved content from resource:', text);
-          } else {
-            console.error('response.blob is undefined');
-          }
-        } catch (error) {
-          console.error('Error reading content:', error);
-        }
-      }
-      return { success: true, resourceName };
+      return {
+        success: true,
+        resourceName,
+        didController: baseDidController, // Return DID controller for verification
+      };
     } catch (error: any) {
       console.error('Error in WAS storage:', error);
       return { success: false, error: error.message };
@@ -265,7 +276,7 @@ const WASScreen = () => {
   return (
     <>
       <NavHeader
-        title='Wallet Storage'
+        title='Connect Resume-Author'
         goBack={navigationRef.goBack}
       />
       <View style={styles.container}>
@@ -322,37 +333,15 @@ const WASScreen = () => {
                     : 'Processing resume...'}
                 </Text>
 
-                <Text style={styles.dataTitle}>Resume Information:</Text>
-
-                {Object.entries(resumeData).map(([key, value]) => (
-                  <Text
-                    key={key}
-                    style={styles.dataItem}
-                  >
-                    <Text style={styles.dataKey}>{key}:</Text>{' '}
-                    {typeof value === 'object'
-                      ? JSON.stringify(value)
-                      : String(value)}
-                  </Text>
-                ))}
-
-                <Button
-                  title='Scan Another Resume'
-                  onPress={() => {
-                    setResumeData(undefined);
-                    setStoredSuccessfully(false);
-                    setRawQRData('');
-                    setScanning(true);
-                  }}
-                />
+                <Text style={styles.dataTitle}>Successfully Connected!</Text>
               </ScrollView>
             ) : (
               <>
                 <Text style={styles.welcomeText}>
-                  Scan a QR code to import a resume
+                  Scan a QR code to connect to your resume-author account.
                 </Text>
                 <Button
-                  title='Scan QR Code'
+                  title='Scan QR'
                   onPress={() => setScanning(true)}
                 />
               </>
