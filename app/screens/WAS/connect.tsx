@@ -9,11 +9,11 @@ import {
 } from 'react-native-vision-camera';
 import { NavHeader } from '../../components';
 import { navigationRef } from '../../navigation';
-import { Ed25519Signer } from '@did.coop/did-key-ed25519';
-import { WalletStorage } from '@did.coop/wallet-attached-storage';
 import { styles } from '../../styles/WasScreen';
-import { v4 as uuidv4 } from 'uuid';
+import authService from './services/authService';
+import walletStorageService from './services/wasService';
 
+// For QR code scanning
 if (typeof btoa === 'undefined') {
   globalThis.btoa = (str: any) => Buffer.from(str, 'binary').toString('base64');
 }
@@ -30,6 +30,13 @@ const WASScreen = () => {
   const devices = useCameraDevices();
   const device = devices.find(device => device.position === 'back');
 
+  // Set up the server URL once
+  useEffect(() => {
+    // Set your development server URL
+    authService.setDefaultServerUrl('http://192.168.1.9:3000');
+  }, []);
+
+  // Handle QR code scanning
   const onCodeScanned = (codes: any) => {
     if (codes.length > 0 && scanning) {
       const qrData = codes[0].value;
@@ -79,6 +86,7 @@ const WASScreen = () => {
     onCodeScanned: onCodeScanned,
   });
 
+  // Request camera permissions
   useEffect(() => {
     (async () => {
       const status = await Camera.requestCameraPermission();
@@ -89,6 +97,7 @@ const WASScreen = () => {
     })();
   }, []);
 
+  // Set up deep link handling
   useEffect(() => {
     const linkingSubscription = Linking.addEventListener('url', handleDeepLink);
     Linking.getInitialURL().then(url => {
@@ -99,6 +108,7 @@ const WASScreen = () => {
     return () => linkingSubscription.remove();
   }, []);
 
+  // Handle deep links
   const handleDeepLink = ({ url }: { url: string }) => {
     if (url && url.startsWith('walletapp://import')) {
       try {
@@ -115,54 +125,7 @@ const WASScreen = () => {
     }
   };
 
-  const confirmAuthentication = async (
-    sessionId: string,
-    token: string,
-    appOrigin: string,
-    result: any
-  ) => {
-    try {
-      const serverUrl = 'http://192.168.1.9:3000'; // TODO: Replace with your server URL
-      const confirmUrl = `${serverUrl}/api/lcw/confirm`;
-
-      console.log(`Confirming authentication with ${confirmUrl}`);
-
-      const verificationData = {
-        sessionId,
-        token,
-        resumeData: {
-          wasResourceName: result.resourceName,
-          wasStorageTimestamp: new Date().toISOString(),
-          storedSuccessfully: true,
-        },
-      };
-
-      const response = await fetch(confirmUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(verificationData),
-      });
-      console.log(`Response status: ${response.status}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Server responded with status ${response.status}: ${errorText}`
-        );
-      }
-
-      const responseData = await response.json();
-      console.log('Authentication confirmed successfully:', responseData);
-
-      return true;
-    } catch (error) {
-      console.error('Error confirming authentication:', JSON.stringify(error));
-      throw error;
-    }
-  };
-
+  // Process the resume data received from QR or deep link
   const processResumeData = async (payload: any) => {
     try {
       setResumeData(payload);
@@ -172,28 +135,28 @@ const WASScreen = () => {
         setConfirmingSession(true);
 
         try {
-          // store the resume data in WAS
-          const result = await storeResumeInWAS(payload);
+          // Store the resume data in WAS using our service
+          const result = await walletStorageService.storeResume(payload);
 
           if (result.success) {
             setStoredSuccessfully(true);
 
-            // confirm authentication with the web app
-            const confirmed = await confirmAuthentication(
+            // Confirm authentication with the web app using our service
+            const confirmResult = await authService.confirmAuthentication(
               sessionId,
               token,
               appOrigin,
-              {
-                ...result,
-                didController: result.didController,
-              }
+              result
             );
 
-            if (confirmed) {
+            if (confirmResult.success) {
               console.log('Backend authentication confirmed successfully');
+            } else {
+              console.warn('Authentication confirmation failed:', confirmResult.error);
+              // Don't show error to user if storage succeeded but confirmation failed
             }
           } else {
-            setError(result.error);
+            setError(result.error || 'Failed to store resume');
           }
         } catch (err: any) {
           setError(err.message);
@@ -201,61 +164,18 @@ const WASScreen = () => {
           setConfirmingSession(false);
         }
       } else {
-        // flow without tokens
-        // const result = await storeResumeInWAS(payload);
-        // if (result.success) {
-        //   setStoredSuccessfully(true);
-        // } else {
-        //   setError(result.error);
-        // }
+        // Non-authentication flow (direct credential storage)
+        const result = await walletStorageService.storeCredential(payload);
+        if (result.success) {
+          setStoredSuccessfully(true);
+        } else {
+          setError(result.error || 'Failed to store credential');
+        }
       }
     } catch (error: any) {
-      console.error('Error storing resume:', error);
-      setError('Failed to store resume: ' + error.message);
+      console.error('Error processing data:', error);
+      setError('Failed to process data: ' + error.message);
       setConfirmingSession(false);
-    }
-  };
-
-  const storeResumeInWAS = async (payload: any) => {
-    try {
-      const appDidSigner = await Ed25519Signer.generate();
-      const baseDidController = appDidSigner.id.split('#')[0];
-
-      const space = await WalletStorage.provisionSpace({
-        url: 'https://data.pub',
-        signer: appDidSigner,
-        id: `urn:uuid:${uuidv4()}`,
-      });
-
-      const spaceObject = {
-        controller: baseDidController,
-        type: 'Collection',
-        items: [],
-        totalItems: 0,
-      };
-      const spaceObjectBlob = new Blob([JSON.stringify(spaceObject)], {
-        type: 'application/json',
-      });
-
-      await space.put(spaceObjectBlob);
-
-      const resourceName = `resume-${payload.resumeId || Date.now()}`;
-      const resumeBlob = new Blob([JSON.stringify(payload)], {
-        type: 'application/json',
-      });
-      const resource = space.resource(resourceName);
-      await resource.put(resumeBlob);
-
-      console.log('Resume stored successfully in WAS:', resourceName);
-
-      return {
-        success: true,
-        resourceName,
-        didController: baseDidController, // Return DID controller for verification
-      };
-    } catch (error: any) {
-      console.error('Error in WAS storage:', error);
-      return { success: false, error: error.message };
     }
   };
 
@@ -334,6 +254,11 @@ const WASScreen = () => {
                 </Text>
 
                 <Text style={styles.dataTitle}>Successfully Connected!</Text>
+
+                <Button
+                  title='View My Credentials'
+                  // onPress={() => navigationRef.navigate('CredentialsScreen')}
+                />
               </ScrollView>
             ) : (
               <>
