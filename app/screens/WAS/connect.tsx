@@ -16,6 +16,7 @@ const WASScreen = () => {
   const devices = useCameraDevices();
   const device = devices.find(d => d.position === 'back');
 
+  // Ask for camera permissions on mount
   useEffect(() => {
     (async () => {
       const status = await Camera.requestCameraPermission();
@@ -23,19 +24,30 @@ const WASScreen = () => {
     })();
   }, []);
 
+  // Main payload processing function
   const processPayload = async (payload: any) => {
-    const { requestUrl } = payload;
-    setMessage('Requesting VC from server...');
+    const { protocols } = payload;
+    const requestUrl = protocols?.vcapi;
+
+    if (!requestUrl) {
+      setMessage('❌ Invalid payload: Missing requestUrl');
+      return;
+    }
+
+    console.log('🔗 Request URL:', requestUrl);
+    setMessage('🔄 Requesting credential...');
 
     try {
+      // Step 1: Initiate the credential request
       await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({}), // Empty = request signal
       });
 
-      setMessage('Storing and sending resume...');
+      setMessage('📦 Sending resume credential...');
 
+      // Step 2: Respond with credential
       const response = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,16 +57,18 @@ const WASScreen = () => {
           },
         }),
       });
+      console.log('🚀 ~ processPayload ~ response:', response);
 
       const result = await response.json();
-      console.log('✅ Confirmed:', result);
-      setMessage('✅ Resume sent to Resume Author!');
+      console.log('✅ Server confirmed:', result);
+      setMessage('✅ Resume sent successfully!');
     } catch (err: any) {
-      console.error('❌ Failed:', err);
+      console.error('❌ Failed to send credential:', err);
       setMessage(`❌ Error: ${err.message}`);
     }
   };
 
+  // QR code scan handler
   const onCodeScanned = (codes: any) => {
     if (!scanning || codes.length === 0) return;
 
@@ -62,14 +76,17 @@ const WASScreen = () => {
     console.log('📷 QR Raw:', raw);
 
     try {
-      const payloadParam = raw.split('payload=')[1];
-      const decoded = decodeURIComponent(payloadParam);
+      // Expecting URL format like: https://lcw.app/request?request=<payload>
+      const requestParam = raw.split('request=')[1];
+      const decoded = decodeURIComponent(requestParam);
       const parsed = JSON.parse(decoded);
+      console.log('🚀 ~ onCodeScanned ~ parsed:', parsed);
+
       setScanning(false);
       processPayload(parsed);
     } catch (err: any) {
-      setMessage('❌ Invalid QR or Payload');
-      console.error(err);
+      console.error('❌ QR Decode Error:', err);
+      setMessage('❌ Invalid QR code or payload format.');
     }
   };
 
@@ -78,9 +95,10 @@ const WASScreen = () => {
     onCodeScanned,
   });
 
+  // No permission yet
   if (!hasPermission) {
     return (
-      <View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text>No camera permission</Text>
       </View>
     );
@@ -102,18 +120,20 @@ const WASScreen = () => {
             <Text>Loading camera...</Text>
           )}
           <Button
-            title='Cancel'
+            title='Cancel Scan'
             onPress={() => setScanning(false)}
           />
         </>
       ) : (
         <>
-          <Text style={{ marginBottom: 10 }}>Tap below to scan QR code:</Text>
+          <Text style={{ marginBottom: 10 }}>
+            Tap below to scan QR code from Resume Author
+          </Text>
           <Button
             title='Start Scan'
             onPress={() => setScanning(true)}
           />
-          <Text style={{ marginTop: 20 }}>{message}</Text>
+          {message !== '' && <Text style={{ marginTop: 20 }}>{message}</Text>}
         </>
       )}
     </View>
