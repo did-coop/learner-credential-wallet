@@ -33,8 +33,8 @@
   },
   "dependencies": {
     "@craftzdog/react-native-buffer": "^6.0.5",
-    "@did-coop/wallet-attached-storage": "0.1.0",
     "@did.coop/did-key-ed25519": "^0.0.9",
+    "@did-coop/wallet-attached-storage": "0.3.0",
     "@digitalcredentials/data-integrity": "^2.5.1-beta.1",
     "@digitalcredentials/did-method-key": "^2.0.3",
     "@digitalcredentials/ed25519-signature-2020": "^6.0.0",
@@ -119,7 +119,6 @@
     "@types/react": "~18.2.45",
     "@types/react-native": "^0.73.0",
     "@types/text-encoding": "^0.0.39",
-    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.16.0",
     "@typescript-eslint/parser": "^6.16.0",
     "babel-plugin-module-resolver": "^5.0.0",
