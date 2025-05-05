@@ -22,7 +22,7 @@ import { useAppDispatch, useDynamicStyles, useResetNavigationOnBlur, useThemeCon
 import { SettingsNavigationProps } from '../';
 import { exportWallet } from '../../lib/export';
 import { registerWallet } from '../../lib/registerWallet';
-import WASScreen from '../../screens/WAS/WasScreen';
+import WASScreen from '../../screens/WAS/connect';
 
 const Stack = createStackNavigator<SettingsNavigationParamList>();
 
