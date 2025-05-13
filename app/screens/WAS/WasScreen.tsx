@@ -10,6 +10,7 @@ import { NavHeader } from '../../components';
 import { navigationRef } from '../../navigation';
 import { Ed25519Signer } from '@did.coop/did-key-ed25519';
 import { WalletStorage } from '@did-coop/wallet-attached-storage';
+import { v4 as uuidv4 } from 'uuid';
 
 const WASScreen = () => {
   const testingWalletStorage = async () => {
@@ -23,6 +24,7 @@ const WASScreen = () => {
       const space = await WalletStorage.provisionSpace({
         url: 'https://data.pub',
         signer: appDidSigner,
+        id: `urn:uuid:${uuidv4()}`,
       });
 
       const spaceObject = {
