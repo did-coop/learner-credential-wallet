@@ -165,9 +165,9 @@ export default function PublicLinkScreen ({ navigation, route }: PublicLinkScree
   }
 
   async function confirmCreatePublicLink() {
-    if (!isVerified) {
-      return displayNotVerifiedModal();
-    }
+    // if (!isVerified) {
+    //   return displayNotVerifiedModal();
+    // }
 
     const confirmed = await displayGlobalModal({
       title: 'Are you sure?',
@@ -251,10 +251,9 @@ export default function PublicLinkScreen ({ navigation, route }: PublicLinkScree
 
   async function exportToPdf() {
     setOpenedExportPdfModal(true);
-    //TODO: Uncomment this before merging
-    // if (!isVerified) {
-    //   return displayNotVerifiedModal(); // Show modal if the credential isn't verified
-    // }
+    if (!isVerified) {
+      return displayNotVerifiedModal(); // Show modal if the credential isn't verified
+    }
 
     const confirmed = await displayGlobalModal({
       title: 'Are you sure?',
