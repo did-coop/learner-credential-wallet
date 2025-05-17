@@ -165,9 +165,9 @@ export default function PublicLinkScreen ({ navigation, route }: PublicLinkScree
   }
 
   async function confirmCreatePublicLink() {
-    // if (!isVerified) {
-    //   return displayNotVerifiedModal();
-    // }
+    if (!isVerified) {
+      return displayNotVerifiedModal();
+    }
 
     const confirmed = await displayGlobalModal({
       title: 'Are you sure?',
