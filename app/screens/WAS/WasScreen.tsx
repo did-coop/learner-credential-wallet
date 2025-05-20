@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-color-literals */
 if (typeof btoa === 'undefined') {
   // eslint-disable-next-line no-global-assign
   globalThis.btoa = (str: any) => Buffer.from(str, 'binary').toString('base64');
@@ -9,8 +10,25 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavHeader } from '../../components';
 import { navigationRef } from '../../navigation';
 import { Ed25519Signer } from '@did.coop/did-key-ed25519';
-import { WalletStorage } from '@did-coop/wallet-attached-storage';
+import { StorageClient } from '@wallet.storage/fetch-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
+import { WAS_BASE_URL } from '../../../app.config';
+
+export const WAS_KEYS = {
+  SPACE_ID: 'was_space_id',
+  SIGNER_JSON: 'was_signer_json'
+};
+
+// Create a singleton instance of StorageClient
+let storageClientInstance: InstanceType<typeof StorageClient> | null = null;
+
+export function getStorageClient() {
+  if (!storageClientInstance) {
+    storageClientInstance = new StorageClient(new URL(WAS_BASE_URL));
+  }
+  return storageClientInstance;
+}
 
 const WASScreen = () => {
   const [status, setStatus] = useState<
@@ -43,7 +61,7 @@ const WASScreen = () => {
       
       const space = storage.space({ 
         signer: appDidSigner,
-        id: `urn:uuid:${uuidv4()}`,
+        id: spaceId as `urn:uuid:${string}`
       });
 
       const spaceObject = {
