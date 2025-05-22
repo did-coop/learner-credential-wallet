@@ -10,7 +10,7 @@ import { Ed25519Signer } from '@did.coop/did-key-ed25519';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WAS_KEYS, getStorageClient } from '../screens/WAS/WasScreen';
 import { v4 as uuidv4 } from 'uuid';
-import { WAS_BASE_URL } from '../../app.config';
+import { WAS_BASE_URL, VERIFIER_PLUS_URL } from '../../app.config';
 
 let cachedSigner: Ed25519Signer | null = null;
 
@@ -22,14 +22,45 @@ export async function createPublicLinkFor(
   const wasLink = await createWasPublicLinkIfAvailable(rawCredentialRecord);
 
   if (wasLink) {
-    await Cache.getInstance().store(CacheKey.PublicLinks, id, {
-      server: WAS_BASE_URL,
-      url: { 
-        view: wasLink.replace(WAS_BASE_URL, ''),
-        unshare: wasLink.replace(WAS_BASE_URL, '')
-      },
-    });
-    return wasLink;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const tryWasLink = await fetch(wasLink, {
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (tryWasLink.ok) {
+        // Check if response is JSON
+        const contentType = tryWasLink.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          console.error('[publicLink.ts] Invalid content type:', contentType);
+          throw new Error('Invalid content type');
+        }
+
+        // Try to parse the response to verify it's valid JSON
+        const response = await tryWasLink.json();
+        if (!response) {
+          throw new Error('Invalid JSON response');
+        }
+
+        await Cache.getInstance().store(CacheKey.PublicLinks, id, {
+          server: WAS_BASE_URL,
+          url: { 
+            view: wasLink.replace(WAS_BASE_URL, ''),
+            unshare: wasLink.replace(WAS_BASE_URL, '')
+          },
+        });
+        return wasLink;
+      } else {
+        console.error('[publicLink.ts] Failed to fetch WAS link:', tryWasLink.status);
+      }
+    } catch (error) {
+      console.error('[publicLink.ts] Error checking WAS link:', error);
+      // Fall through to verifierPlus
+    }
   }
   
   // Fall back to verifierPlus
@@ -119,7 +150,7 @@ async function createWasPublicLinkIfAvailable(
     }
     
     // Create the public link using the resource path
-    const publicLink = `${WAS_BASE_URL}${resource.path}`;
+    const publicLink = `${VERIFIER_PLUS_URL}/verfiy?vc=${WAS_BASE_URL}${resource.path}7676`;
     console.log('Created WAS public link:', publicLink);
     
     return publicLink; 
