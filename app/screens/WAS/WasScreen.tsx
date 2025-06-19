@@ -15,6 +15,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { WAS_BASE_URL } from '../../../app.config';
 import { useThemeContext } from '../../hooks';
+import { Cache, CacheKey } from '../../lib/cache';
+import { removeWasPublicLink } from '../../lib/removeWasPublicLink';
 
 if (typeof globalThis.base64FromArrayBuffer !== 'function') {
   globalThis.base64FromArrayBuffer = function base64FromArrayBuffer(arrayBuffer) {
@@ -129,6 +131,20 @@ const WASScreen = () => {
 
       if (!response.ok) {
         throw new Error(`Failed to delete space. Status: ${response.status}`);
+      }
+
+      const mapData = await AsyncStorage.getItem('map');
+      if (mapData) {
+        const map = JSON.parse(mapData);
+        // Get all keys that start with 'publiclinks_'
+        const publicLinkKeys = Object.keys(map)
+          .filter(key => key.startsWith('publiclinks_'))
+          .map(key => key.replace('publiclinks_', ''));
+
+        // Process each public link
+        for (const key of publicLinkKeys) {
+          await removeWasPublicLink(key, map);
+        }
       }
 
       // Clear stored items
