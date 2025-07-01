@@ -19,7 +19,6 @@ import { removeWasPublicLink } from '../../lib/removeWasPublicLink';
 import { shareBinaryFile } from '../../lib/shareData';
 import { displayGlobalModal } from '../../lib/globalModal';
 
-
 if (typeof globalThis.base64FromArrayBuffer !== 'function') {
   globalThis.base64FromArrayBuffer = function base64FromArrayBuffer(arrayBuffer) {
     var base64    = '';
@@ -281,7 +280,6 @@ const WASScreen = () => {
       setMessage('Exporting space...');
   
       if (!connectionDetails) throw new Error('No connection details found');
-  
       const confirmed = await displayGlobalModal({
         title: 'Export Space',
         confirmText: 'Export',

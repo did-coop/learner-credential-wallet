@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WAS_KEYS, getStorageClient } from '../screens/WAS/WasScreen';
 import { v4 as uuidv4 } from 'uuid';
 import { WAS_BASE_URL, VERIFIER_PLUS_URL } from '../../app.config';
+import { createHttpSignatureAuthorization } from 'authorization-signature';
 
 let cachedSigner: Ed25519Signer | null = null;
 
@@ -111,6 +112,9 @@ async function createWasPublicLinkIfAvailable(
     const response = await resource.put(credentialBlob, { 
       signer,
     });
+
+    console.log('Sending authorized request to:', resourceUrl.toString());
+    const response = await fetch(authorizedRequest);
     
     console.log('WAS storage response:', {
       status: response.status,
@@ -118,9 +122,13 @@ async function createWasPublicLinkIfAvailable(
     });
 
     if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
       console.error(
         '[publicLink.ts] Failed to store credential in WAS. Status:',
         response.status,
+        'Error:',
+        errorText
+
       );
       return null;
     }
