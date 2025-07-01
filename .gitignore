@@ -85,3 +85,4 @@ ios_old
 ios
 *.xcarchive
 android
+.yalc/*
