@@ -313,7 +313,6 @@ const WASScreen = () => {
       const response = await space.get({
         headers: [['Accept', 'application/x-tar']]
       });
-      console.log('🚀 ~ exportSpace ~ response:', JSON.stringify(response, null, 2))
   
       if (!response.ok) throw new Error(`Failed to export space. Status: ${response.status}`);
   
