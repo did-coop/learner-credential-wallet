@@ -1,23 +1,24 @@
-
 /* eslint-disable react-native/no-color-literals */
 if (typeof btoa === 'undefined') {
   // eslint-disable-next-line no-global-assign
   globalThis.btoa = (str: any) => Buffer.from(str, 'binary').toString('base64');
-  globalThis.btoa = (str: any) => Buffer.from(str, 'binary').toString('base64');
 }
-
 import 'react-native-get-random-values';
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
 import { NavHeader } from '../../components';
 import { navigationRef } from '../../navigation';
 import { Ed25519Signer } from '@did.coop/did-key-ed25519';
-import { WalletStorage } from '@did-coop/wallet-attached-storage';
+import { StorageClient } from '@wallet.storage/fetch-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { WAS_BASE_URL } from '../../../app.config';
 import { useThemeContext } from '../../hooks';
+import { removeWasPublicLink } from '../../lib/removeWasPublicLink';
+import { shareBinaryFile } from '../../lib/shareData';
+import { displayGlobalModal } from '../../lib/globalModal';
+
 
 if (typeof globalThis.base64FromArrayBuffer !== 'function') {
   globalThis.base64FromArrayBuffer = function base64FromArrayBuffer(arrayBuffer) {
@@ -74,103 +75,443 @@ if (typeof globalThis.base64FromArrayBuffer !== 'function') {
 
 }
 
-export const WAS_STORAGE_KEYS = {
+export const WAS_KEYS = {
   SPACE_ID: 'was_space_id',
-  SIGNER_JSON: 'was_signer_json',
-  APP_DID_SIGNER: 'was_app_did_signer',
+  SIGNER_JSON: 'was_signer_json'
 };
 
-export const WAS_BASE_URL = 'https://data.pub';
+// Create a singleton instance of StorageClient
+let storageClientInstance: InstanceType<typeof StorageClient> | null = null;
+
+export function getStorageClient() {
+  if (!storageClientInstance) {
+    storageClientInstance = new StorageClient(new URL(WAS_BASE_URL));
+  }
+  return storageClientInstance;
+}
 
 const WASScreen = () => {
+  const { theme } = useThemeContext();
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'success' | 'error'
   >('idle');
   const [message, setMessage] = useState<string>('');
+  const [hasConnection, setHasConnection] = useState<boolean>(false);
+  const [connectionDetails, setConnectionDetails] = useState<{
+    spaceId: string;
+    controllerDid: string;
+  } | null>(null);
+
+  const deleteSpace = async () => {
+    try {
+      setStatus('loading');
+      setMessage('Deleting space...');
+
+      if (!connectionDetails) {
+        throw new Error('No connection details found');
+      }
+
+      // Get the stored signer
+      const signerJson = await AsyncStorage.getItem(WAS_KEYS.SIGNER_JSON);
+      if (!signerJson) {
+        throw new Error('No signer found');
+      }
+
+      const signer = await Ed25519Signer.fromJSON(signerJson);
+      const storage = getStorageClient();
+      const space = storage.space({
+        signer,
+        id: connectionDetails.spaceId as `urn:uuid:${string}`,
+      });
+
+      // Delete the space
+      const response = await space.delete({
+        signer,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete space. Status: ${response.status}`);
+      }
+
+      const mapData = await AsyncStorage.getItem('map');
+      if (mapData) {
+        const map = JSON.parse(mapData);
+        // Get all keys that start with 'publiclinks_'
+        const publicLinkKeys = Object.keys(map)
+          .filter(key => key.startsWith('publiclinks_'))
+          .map(key => key.replace('publiclinks_', ''));
+
+        // Process each public link
+        for (const key of publicLinkKeys) {
+          await removeWasPublicLink(key, map);
+        }
+      }
+
+      // Clear stored items
+      await AsyncStorage.removeItem(WAS_KEYS.SIGNER_JSON);
+      await AsyncStorage.removeItem(WAS_KEYS.SPACE_ID);
+
+      setStatus('success');
+      setMessage('Space successfully deleted');
+      setHasConnection(false);
+      setConnectionDetails(null);
+    } catch (error) {
+      console.error('Error deleting WAS space:', error);
+      setStatus('error');
+      setMessage(
+        error instanceof Error
+          ? `Error: ${error.message}`
+          : 'Failed to delete WAS space'
+      );
+    }
+  };
+
+  const checkExistingConnection = async () => {
+    try {
+      const spaceId = await AsyncStorage.getItem(WAS_KEYS.SPACE_ID);
+      const signerJson = await AsyncStorage.getItem(WAS_KEYS.SIGNER_JSON);
+
+      if (spaceId && signerJson) {
+        setHasConnection(true);
+        const signer = await Ed25519Signer.fromJSON(signerJson);
+        setConnectionDetails({
+          spaceId: `urn:uuid:${spaceId}`,
+          controllerDid: signer.id
+        });
+      }
+    } catch (error) {
+      console.error('Error checking WAS connection:', error);
+    }
+  };
+
+  useEffect(() => {
+    checkExistingConnection();
+  }, []);
 
   const provisionWAS = async () => {
     try {
       setStatus('loading');
       setMessage('Generating signer...');
 
+      // Generate a new Ed25519 signer (key pair)
       const appDidSigner = await Ed25519Signer.generate();
-      await AsyncStorage.setItem(WAS_STORAGE_KEYS.APP_DID_SIGNER, JSON.stringify(appDidSigner));
       console.log('Generated signer:', appDidSigner.id);
 
+      // Extract base controller DID (without the key fragment)
+      const baseDidController = appDidSigner.id.split('#')[0];
+      console.log('Controller DID:', baseDidController);
+
       setMessage('Creating space...');
-      const spaceId = `urn:uuid:${uuidv4()}`;
-      console.log('Creating space with ID:', spaceId);
 
-      const space = await WalletStorage.provisionSpace({
-        url: WAS_BASE_URL,
+      // Generate a UUID for the space
+      const spaceUUID = uuidv4();
+      const spaceId = `urn:uuid:${spaceUUID}`;
+      console.log('Space ID:', spaceId);
+
+      // Use the singleton storage client
+      const storage = getStorageClient();
+
+      const space = storage.space({
         signer: appDidSigner,
-        id: spaceId as `urn:uuid:${string}`,
+        id: spaceId as `urn:uuid:${string}`
       });
-      console.log('Space provisioned successfully:', space);
 
-      // Store signer and spaceId in AsyncStorage
-      const signerJson = await appDidSigner.toJSON();
-      // Ensure signer has an ID
-      if (!signerJson.id && signerJson.controller && signerJson.publicKeyMultibase) {
-        signerJson.id = `${signerJson.controller}#${signerJson.publicKeyMultibase}`;
+      const spaceObject = {
+        id: spaceId,
+        controller: baseDidController
+      };
+
+      console.log('Creating space with object:', spaceObject);
+
+      const spaceObjectBlob = new Blob(
+        [JSON.stringify(spaceObject)],
+        { type: 'application/json' }
+      );
+
+      // Create the space
+      const response = await space.put(spaceObjectBlob, {
+        signer: appDidSigner
+      });
+
+      console.log('Space PUT response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to initialize space. Status: ${response.status}`);
       }
+
+      // Store the signer for future connections
+      const signerJson = await appDidSigner.toJSON();
       await AsyncStorage.setItem(
-        WAS_STORAGE_KEYS.SIGNER_JSON,
+        WAS_KEYS.SIGNER_JSON,
         JSON.stringify(signerJson)
       );
-      // Store the full space ID with urn:uuid: prefix
-      await AsyncStorage.setItem(WAS_STORAGE_KEYS.SPACE_ID, spaceId);
-      console.log('Stored space ID:', spaceId);
+
+      // Store the space UUID for future connections
+      await AsyncStorage.setItem(WAS_KEYS.SPACE_ID, spaceUUID);
+      console.log('Stored space ID in AsyncStorage:', spaceUUID);
 
       setStatus('success');
       setMessage('WAS storage successfully provisioned!');
+      setHasConnection(true);
+      setConnectionDetails({
+        spaceId,
+        controllerDid: appDidSigner.id
+      });
     } catch (error) {
       console.error('Error in wallet storage provisioning:', error);
       setStatus('error');
       setMessage(
         error instanceof Error
-          ? error.message
+          ? `Error: ${error.message}`
           : 'Failed to provision WAS storage'
       );
 
       // Clear stored items if provisioning failed
-      await AsyncStorage.removeItem(WAS_STORAGE_KEYS.SIGNER_JSON);
-      await AsyncStorage.removeItem(WAS_STORAGE_KEYS.SPACE_ID);
+      await AsyncStorage.removeItem(WAS_KEYS.SIGNER_JSON);
+      await AsyncStorage.removeItem(WAS_KEYS.SPACE_ID);
     }
   };
 
-  useEffect(() => {
-    provisionWAS();
-  }, []);
+  const exportSpace = async () => {
+    try {
+      setStatus('loading');
+      setMessage('Exporting space...');
+  
+      if (!connectionDetails) throw new Error('No connection details found');
+  
+      const confirmed = await displayGlobalModal({
+        title: 'Export Space',
+        confirmText: 'Export',
+        cancelOnBackgroundPress: true,
+        body: (
+          <Text style={{ color: theme.color.textPrimary }}>
+            This will export your entire WAS space as a tarball file.
+          </Text>
+        )
+      });
+  
+      if (!confirmed) {
+        setStatus('idle');
+        setMessage('');
+        return;
+      }
+  
+      const signerJson = await AsyncStorage.getItem(WAS_KEYS.SIGNER_JSON);
+      if (!signerJson) throw new Error('No signer found');
+  
+      const signer = await Ed25519Signer.fromJSON(signerJson);
+      const storage = getStorageClient();
+  
+      const space = storage.space({
+        signer,
+        id: connectionDetails.spaceId as `urn:uuid:${string}`,
+      });
+  
+      const response = await space.get({
+        headers: {
+          Accept: 'application/x-tar'
+        }
+      });
+  
+      if (!response.ok) throw new Error(`Failed to export space. Status: ${response.status}`);
+  
+      const blob = await response.blob?.();
+      if (!blob) throw new Error('Failed to get blob from response');
+
+      const fileName = `was-space-${connectionDetails.spaceId.split('urn:uuid:')[1]}.tar`;
+  
+      const reader = new FileReader();
+  
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          const base64Data = dataUrl.split(',')[1]; // strip "data:*/*;base64,"
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+  
+      try {
+        await shareBinaryFile(fileName, base64, 'application/x-tar');
+      } catch (err) {
+        await shareBinaryFile(fileName, base64, 'application/x-tar');
+      }
+  
+      setStatus('success');
+      setMessage('Space exported and ready to share!');
+    } catch (err) {
+      console.error('Error exporting space:', err);
+      setStatus('error');
+      setMessage(err instanceof Error ? `Error: ${err.message}` : 'Failed to export space');
+    }
+  };
+
+  const renderConnectionDetails = () => {
+    if (!connectionDetails) return null;
+
+    const spaceUrl = `${WAS_BASE_URL}/space/${
+      connectionDetails.spaceId.split('urn:uuid:')[1]
+    }`;
+
+    return (
+      <View
+        style={[
+          styles.content,
+          { backgroundColor: theme.color.backgroundPrimary },
+        ]}
+      >
+        <View style={styles.detailsContainer}>
+          <Text style={[styles.label, { color: theme.color.textSecondary }]}>
+            Storage Provider
+          </Text>
+          <Text style={[styles.value, { color: theme.color.textPrimary }]}>
+            {WAS_BASE_URL}
+          </Text>
+
+          <Text
+            style={[
+              styles.label,
+              styles.labelWithMargin,
+              { color: theme.color.textSecondary },
+            ]}
+          >
+            Space URL
+          </Text>
+          <TouchableOpacity onPress={() => Linking.openURL(spaceUrl)}>
+            <Text style={[styles.value, { color: theme.color.linkColor }]}>
+              {spaceUrl}
+            </Text>
+          </TouchableOpacity>
+
+          <Text
+            style={[
+              styles.label,
+              styles.labelWithMargin,
+              { color: theme.color.textSecondary },
+            ]}
+          >
+            Controller DID
+          </Text>
+          <Text style={[styles.value, { color: theme.color.textPrimary }]}>
+            {connectionDetails.controllerDid}
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.deleteButton,
+              { backgroundColor: theme.color.error },
+            ]}
+            onPress={deleteSpace}
+          >
+            <Text
+              style={[
+                styles.deleteButtonText,
+                { color: theme.color.textPrimary },
+              ]}
+            >
+              Delete/Unprovision Space
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.connectButton,
+              { backgroundColor: theme.color.buttonPrimary },
+            ]}
+            onPress={exportSpace}
+          >
+            <Text
+              style={[
+                styles.connectButtonText,
+                { color: theme.color.textPrimary },
+              ]}
+            >
+              Export Space
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   const renderContent = () => {
+    if (hasConnection) {
+      return renderConnectionDetails();
+    }
+
     switch (status) {
     case 'loading':
       return (
-        <View style={styles.content}>
+        <View
+          style={[
+            styles.content,
+            { backgroundColor: theme.color.backgroundPrimary },
+          ]}
+        >
           <ActivityIndicator
             size='large'
-            color='#0000ff'
+            color={theme.color.buttonPrimary}
           />
-          <Text style={styles.message}>{message}</Text>
+          <Text style={[styles.message, { color: theme.color.textPrimary }]}>
+            {message}
+          </Text>
         </View>
       );
     case 'success':
       return (
-        <View style={styles.content}>
-          <Text style={[styles.message, styles.successMessage]}>
+        <View
+          style={[
+            styles.content,
+            { backgroundColor: theme.color.backgroundPrimary },
+          ]}
+        >
+          <Text style={[styles.message, { color: theme.color.success }]}>
             {message}
           </Text>
         </View>
       );
     case 'error':
       return (
-        <View style={styles.content}>
-          <Text style={[styles.message, styles.errorMessage]}>{message}</Text>
+        <View
+          style={[
+            styles.content,
+            { backgroundColor: theme.color.backgroundPrimary },
+          ]}
+        >
+          <Text style={[styles.message, { color: theme.color.error }]}>
+            {message}
+          </Text>
         </View>
       );
     default:
-      return null;
+      return (
+        <View
+          style={[
+            styles.content,
+            { backgroundColor: theme.color.backgroundPrimary },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.connectButton,
+              { backgroundColor: theme.color.buttonPrimary },
+            ]}
+            onPress={provisionWAS}
+          >
+            <Text
+              style={[
+                styles.connectButtonText,
+                { color: theme.color.textPrimaryDark },
+              ]}
+            >
+              Connect to W.A.S.
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
     }
   };
 
@@ -180,7 +521,14 @@ const WASScreen = () => {
         title={hasConnection ? 'W.A.S. Connection' : 'W.A.S'}
         goBack={navigationRef.goBack}
       />
-      <View style={styles.container}>{renderContent()}</View>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.color.backgroundPrimary },
+        ]}
+      >
+        {renderContent()}
+      </View>
     </>
   );
 };
@@ -188,7 +536,6 @@ const WASScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
   },
   content: {
     flex: 1,
@@ -201,11 +548,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  successMessage: {
-    color: '#4CAF50', // Material Design Green
+  connectButton: {
+    padding: 16,
+    borderRadius: 5,
+    minWidth: 200,
+    alignItems: 'center',
   },
-  errorMessage: {
-    color: '#F44336', // Material Design Red
+  connectButtonText: {
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+  },
+  detailsContainer: {
+    width: '100%',
+    padding: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    marginBottom: 4,
+  },
+  labelWithMargin: {
+    marginTop: 16,
+  },
+  value: {
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+  },
+  deleteButton: {
+    marginTop: 32,
+    padding: 16,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
   },
 });
 
