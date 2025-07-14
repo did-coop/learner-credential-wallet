@@ -19,7 +19,6 @@ import { removeWasPublicLink } from '../../lib/removeWasPublicLink';
 import { shareBinaryFile } from '../../lib/shareData';
 import { displayGlobalModal } from '../../lib/globalModal';
 
-
 if (typeof globalThis.base64FromArrayBuffer !== 'function') {
   globalThis.base64FromArrayBuffer = function base64FromArrayBuffer(arrayBuffer) {
     var base64    = '';
@@ -118,7 +117,9 @@ const WASScreen = () => {
       }
 
       const signer = await Ed25519Signer.fromJSON(signerJson);
+
       const storage = getStorageClient();
+
       const space = storage.space({
         signer,
         id: connectionDetails.spaceId as `urn:uuid:${string}`,
@@ -346,7 +347,6 @@ const WASScreen = () => {
     } catch (err) {
       console.error('Error exporting space:', err);
       setStatus('error');
-      setMessage(err instanceof Error ? `Error: ${err.message}` : 'Failed to export space');
     }
   };
 
