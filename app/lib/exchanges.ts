@@ -15,6 +15,7 @@ import { clearGlobalModal, displayGlobalModal } from './globalModal';
 import { getGlobalModalBody } from './globalModalBody';
 import { delay } from './time';
 import { filterCredentialRecordsByType } from './credentialMatching';
+import handleZcapRequest from './handleZcapRequest';
 
 const MAX_INTERACTIONS = 10;
 
@@ -183,6 +184,12 @@ export async function handleVcApiExchangeComplete ({
     throw new Error(`Received invalid interaction URL from issuer: ${url}`);
   }
 
+  // Handle case where we have a ready-to-submit Verifiable Presentation
+  if ((request as any).verifiablePresentation) {
+    const finalResponse = await postToExchange(url, request);
+    return finalResponse;
+  }
+
   // Start the exchange process - POST an empty {} to the exchange API url
   const exchangeResponse = await postToExchange(url, request);
   console.log('Initial exchange response:', JSON.stringify(exchangeResponse, null, 2));
@@ -208,6 +215,18 @@ export async function handleVcApiExchangeComplete ({
     case VcQueryType.DidAuth:
       signed = true;
       break;
+    case VcQueryType.ZcapQuery: {
+      const vp = await handleZcapRequest({
+        request: exchangeResponse.verifiablePresentationRequest
+      });
+      const interactUrl = exchangeResponse.verifiablePresentationRequest?.interact?.serviceEndpoint;
+      if (!interactUrl) {
+        throw new Error('Missing serviceEndpoint in VPR interact.');
+      }
+
+      const finalResponse = await postToExchange(interactUrl, vp);
+      return finalResponse;
+    }
     default: {
       console.log('Querying...');
       const allRecords = await CredentialRecord.getAllCredentialRecords();

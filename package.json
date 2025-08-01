@@ -34,6 +34,7 @@
   "dependencies": {
     "@craftzdog/react-native-buffer": "^6.0.5",
     "@did.coop/did-key-ed25519": "^0.0.9",
+    "@digitalbazaar/ezcap": "^4.1.0",
     "@digitalcredentials/data-integrity": "^2.5.1-beta.1",
     "@digitalcredentials/did-method-key": "^2.0.3",
     "@digitalcredentials/ed25519-signature-2020": "^6.0.0",
@@ -61,6 +62,8 @@
     "big-integer": "^1.6.49",
     "bson": "4.4.1",
     "expo": "~50.0.6",
+    "expo-barcode-scanner": "^13.0.1",
+    "expo-camera": "^16.1.10",
     "expo-crypto": "~12.8.0",
     "expo-dev-client": "~3.3.8",
     "expo-secure-store": "~12.8.1",
