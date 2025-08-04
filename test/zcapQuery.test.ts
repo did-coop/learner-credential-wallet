@@ -1,4 +1,8 @@
-// test/handleZcapRequest.test.ts
+jest.mock('../app/lib/globalModal', () => ({
+  displayGlobalModal: jest.fn().mockResolvedValue(true),
+  clearGlobalModal: jest.fn()
+}));
+
 import handleZcapRequest from '../app/lib/handleZcapRequest';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -33,12 +37,6 @@ jest.mock('@digitalbazaar/ezcap', () => ({
     async delegate() {
       return { id: 'urn:fake:zcap', proof: { type: 'Ed25519Signature2020' } };
     }
-  }
-}));
-
-jest.mock('../app/lib/showZcapConsentModal', () => ({
-  showZcapConsentModal: ({ callback }: { callback: (value: boolean) => void }) => {
-    callback(true); // simulate user approval
   }
 }));
 

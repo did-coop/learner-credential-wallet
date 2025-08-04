@@ -39,7 +39,7 @@ export default async function handleZcapRequest({
 
   const approved = await displayGlobalModal({
     title: 'App Permission Request',
-    body: `**Unrecognized Application** is asking for the following permission:\n\n"${reason}"\n\n1. Read and Write access to the Verifiable Credentials collection`,
+    body: `Unrecognized Application is asking for the following permission:\n\n"${reason}"\n\nRead and Write access to the Verifiable Credentials collection`,
     confirmText: 'Allow',
     cancelText: 'Cancel',
     onConfirm: () => true,

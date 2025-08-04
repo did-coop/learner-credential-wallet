@@ -185,10 +185,10 @@ export async function handleVcApiExchangeComplete ({
   }
 
   // Handle case where we have a ready-to-submit Verifiable Presentation
-  if ((request as any).verifiablePresentation) {
-    const finalResponse = await postToExchange(url, request);
-    return finalResponse;
-  }
+  // if ((request as any).verifiablePresentation) {
+  //   const finalResponse = await postToExchange(url, request);
+  //   return finalResponse;
+  // }
 
   // Start the exchange process - POST an empty {} to the exchange API url
   const exchangeResponse = await postToExchange(url, request);
