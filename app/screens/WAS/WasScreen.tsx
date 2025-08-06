@@ -13,7 +13,7 @@ import { Ed25519Signer } from '@did.coop/did-key-ed25519';
 import { StorageClient } from '@wallet.storage/fetch-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
-import { WAS_BASE_URL } from '../../../app.config';
+import { WAS_BASE_URL, WAS_KEYS } from '../../../app.config';
 import { useThemeContext } from '../../hooks';
 import { removeWasPublicLink } from '../../lib/removeWasPublicLink';
 import { shareBinaryFile } from '../../lib/shareData';
@@ -74,11 +74,6 @@ if (typeof globalThis.base64FromArrayBuffer !== 'function') {
   }
 
 }
-
-export const WAS_KEYS = {
-  SPACE_ID: 'was_space_id',
-  SIGNER_JSON: 'was_signer_json'
-};
 
 // Create a singleton instance of StorageClient
 let storageClientInstance: InstanceType<typeof StorageClient> | null = null;
@@ -195,7 +190,7 @@ const WASScreen = () => {
 
       // Generate a new Ed25519 signer (key pair)
       const appDidSigner = await Ed25519Signer.generate();
-      console.log('Generated signer:', appDidSigner.id);
+      console.log('Generated signer:', appDidSigner);
 
       // Extract base controller DID (without the key fragment)
       const baseDidController = appDidSigner.id.split('#')[0];
