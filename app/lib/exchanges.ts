@@ -184,12 +184,6 @@ export async function handleVcApiExchangeComplete ({
     throw new Error(`Received invalid interaction URL from issuer: ${url}`);
   }
 
-  // Handle case where we have a ready-to-submit Verifiable Presentation
-  // if ((request as any).verifiablePresentation) {
-  //   const finalResponse = await postToExchange(url, request);
-  //   return finalResponse;
-  // }
-
   // Start the exchange process - POST an empty {} to the exchange API url
   const exchangeResponse = await postToExchange(url, request);
   console.log('Initial exchange response:', JSON.stringify(exchangeResponse, null, 2));
