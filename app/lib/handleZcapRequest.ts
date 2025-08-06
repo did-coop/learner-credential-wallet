@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WAS_KEYS, zcap_expires } from '../../app.config';
+import { WAS_KEYS, ZCAP_EXPIRES } from '../../app.config';
 import { Ed25519VerificationKey2020 } from '@digitalcredentials/ed25519-verification-key-2020';
 // @ts-ignore
 import { ZcapClient } from '@digitalbazaar/ezcap';
@@ -72,7 +72,7 @@ export default async function handleZcapRequest({
     controller,
     invocationTarget: invocationTargetType,
     allowedActions: allowedAction,
-    expires: zcap_expires.toISOString()
+    expires: ZCAP_EXPIRES.toISOString()
   });
 
   return {
