@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WAS_KEYS } from '../../app.config';
+import { WAS_KEYS, zcap_expires } from '../../app.config';
 import { Ed25519VerificationKey2020 } from '@digitalcredentials/ed25519-verification-key-2020';
 // @ts-ignore
 import { ZcapClient } from '@digitalbazaar/ezcap';
@@ -18,7 +18,7 @@ interface ZcapReq {
           type: string;
           name: string;
           contentType: string;
-        };
+        } | string;
         reason: string;
       };
     }[];
@@ -54,11 +54,13 @@ export default async function handleZcapRequest({
     throw new Error('Root signer not found in wallet.');
   }
 
+  const invocationTargetType = typeof invocationTarget === 'string' ? invocationTarget : invocationTarget.type;
+
   const rootSigner = await Ed25519VerificationKey2020.from(
     JSON.parse(rootSignerStr)
   );
 
-  const cacheKey = `WAS_ZCAP_ROOT_${invocationTarget.type}`;
+  const cacheKey = `WAS_ZCAP_ROOT_${invocationTargetType}`;
   const cached = await AsyncStorage.getItem(cacheKey);
 
   let parentCapability: string | object;
@@ -67,7 +69,7 @@ export default async function handleZcapRequest({
     parentCapability = JSON.parse(cached);
   } else {
     // Generate a root capability ID for this resource
-    parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTarget.type)}`;
+    parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTargetType)}`;
     await AsyncStorage.setItem(cacheKey, JSON.stringify(parentCapability));
   }
 
@@ -76,14 +78,12 @@ export default async function handleZcapRequest({
     delegationSigner: rootSigner.signer()
   });
 
-  const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 10); // 10 days
-
   const delegatedZcap = await zcapClient.delegate({
     capability: parentCapability,
     controller,
-    invocationTarget: invocationTarget.type,
+    invocationTarget: invocationTargetType,
     allowedActions: allowedAction,
-    expires: expires.toISOString()
+    expires: zcap_expires.toISOString()
   });
 
   return {
