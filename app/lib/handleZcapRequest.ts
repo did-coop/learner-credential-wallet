@@ -49,6 +49,7 @@ export default async function handleZcapRequest({
     throw new Error('User denied Zcap delegation');
   }
 
+  // TODO: Extract this code (loading from storage and re-hydrating the signer) to a `getRootSigner()` function
   const rootSignerStr = await AsyncStorage.getItem(WAS_KEYS.SIGNER_JSON);
   if (!rootSignerStr) {
     throw new Error('Root signer not found in wallet.');
