@@ -60,18 +60,7 @@ export default async function handleZcapRequest({
     JSON.parse(rootSignerStr)
   );
 
-  const cacheKey = `WAS_ZCAP_ROOT_${invocationTargetType}`;
-  const cached = await AsyncStorage.getItem(cacheKey);
-
-  let parentCapability: string | object;
-
-  if (cached) {
-    parentCapability = JSON.parse(cached);
-  } else {
-    // Generate a root capability ID for this resource
-    parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTargetType)}`;
-    await AsyncStorage.setItem(cacheKey, JSON.stringify(parentCapability));
-  }
+  const parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTargetType)}`;
 
   const zcapClient = new ZcapClient({
     SuiteClass: Ed25519Signature2020,

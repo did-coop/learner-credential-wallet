@@ -209,6 +209,7 @@ export async function handleVcApiExchangeComplete ({
     case VcQueryType.DidAuth:
       signed = true;
       break;
+    // TODO: Support multi-round interactions for zcaps (currently only supports a single round interaction)
     case VcQueryType.ZcapQuery: {
       const vp = await handleZcapRequest({
         request: exchangeResponse.verifiablePresentationRequest
