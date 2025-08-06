@@ -76,10 +76,6 @@ export default async function handleZcapRequest({
   });
 
   return {
-    verifiablePresentation: {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
-      type: 'VerifiablePresentation',
-      verifiableCredential: [delegatedZcap]
-    }
+    zcap: delegatedZcap
   };
 }
