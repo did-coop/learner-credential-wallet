@@ -2,12 +2,12 @@ import React, { useContext, useEffect } from 'react';
 import { Linking, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-elements';
 import { MaterialIcons } from '@expo/vector-icons';
+import qs from 'query-string';
 
 import { LoadingIndicatorDots, NavHeader } from '../../components';
 import dynamicStyleSheet from './ShareHomeScreen.styles';
 import { ShareHomeScreenProps } from '../../navigation';
 import { useDynamicStyles } from '../../hooks';
-import { queryParamsFrom } from '../../lib/decode';
 import { isShareRequestParams, performShareRequest, ShareRequestParams } from '../../lib/shareRequest';
 import { HumanReadableError } from '../../lib/error';
 import { fmtCredentialCount } from '../../lib/text';
@@ -172,8 +172,8 @@ export default function ShareHomeScreen({ navigation, route }: ShareHomeScreenPr
   }
 
   async function scanShareRequestQRCode() {
-    const text = await NavigationUtil.scanQRCode({ instructionText: 'Scan a share QR code to continue.' });
-    const params = queryParamsFrom(text);
+    const urlText = await NavigationUtil.scanQRCode({ instructionText: 'Scan a share QR code to continue.' });
+    const { query: params } = qs.parseUrl(urlText);
 
     if (!isShareRequestParams(params)) {
       throw new HumanReadableError('Invalid QR code. Make sure you are scanning a share request QR code.');
