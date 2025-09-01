@@ -34,13 +34,22 @@ export function queryParamsFrom(url: string): Record<string, unknown> {
 
 export function credentialRequestFromChapiUrl(url: string): ChapiCredentialRequest {
   const params = qs.parse(url.split('?')[1]);
-  const isValid = isChapiCredentialRequestParams(params);
 
-  if (!isValid) {
-    throw new HumanReadableError('[credentialRequestFromChapiUrl] The credential request was malformed.');
-  }
+  const request = getChapiCredentialRequest(params);
+  console.log('Incoming request:', JSON.stringify(request, null, 2));
+  /**
+   * Example requests:
+   * { credentialRequestOrigin, protocols }
+   * { verifiablePresentationRequest: { interact, query } }
+   * { issueRequest: { interact, credential } }
+   */
 
-  return getChapiCredentialRequest(params);
+  // const isValid = isChapiCredentialRequestParams(params);
+  // if (!isValid) {
+  //   throw new HumanReadableError('[credentialRequestFromChapiUrl] The credential request was malformed.');
+  // }
+  // return getChapiCredentialRequest(params);
+  return request;
 }
 
 export function credentialRequestParamsFromQrText(text: string): CredentialRequestParams {
