@@ -3,7 +3,7 @@ import { fromQrCode, toQrCode } from '@digitalcredentials/vpqr';
 import qs from 'query-string';
 
 import { securityLoader } from '@digitalcredentials/security-document-loader';
-import { ChapiCredentialRequest, ChapiCredentialResponse, ChapiDidAuthRequest } from '../types/chapi';
+import { VcApiCredentialRequest, ChapiCredentialResponse, ChapiDidAuthRequest } from '../types/chapi';
 import type { Credential, EducationalOperationalCredential, Subject } from '../types/credential';
 import { VerifiablePresentation } from '../types/presentation';
 import { CredentialRequestParams, getChapiCredentialRequest, isChapiCredentialRequestParams } from './credentialRequest';
@@ -32,17 +32,11 @@ export function queryParamsFrom(url: string): Record<string, unknown> {
   return query;
 }
 
-export function credentialRequestFromChapiUrl(url: string): ChapiCredentialRequest {
+export function credentialRequestFromChapiUrl(url: string): VcApiCredentialRequest {
   const params = qs.parse(url.split('?')[1]);
 
   const request = getChapiCredentialRequest(params);
   console.log('Incoming request:', JSON.stringify(request, null, 2));
-  /**
-   * Example requests:
-   * { credentialRequestOrigin, protocols }
-   * { verifiablePresentationRequest: { interact, query } }
-   * { issueRequest: { interact, credential } }
-   */
 
   // const isValid = isChapiCredentialRequestParams(params);
   // if (!isValid) {

@@ -3,7 +3,7 @@ import { Linking } from 'react-native';
 import qs from 'query-string';
 
 import { navigationRef, RootNavigationParamsList } from '../navigation';
-import { ChapiCredentialRequest } from '../types/chapi';
+import { VcApiCredentialRequest } from '../types/chapi';
 import { credentialRequestFromChapiUrl } from './decode';
 import { encodeQueryParams } from './encode';
 import { onShareIntent } from './shareIntent';
@@ -95,7 +95,7 @@ function deepLinkConfigFor({ schemes, paths, onDeepLink }: DeepLinkConfigOptions
       } else if ('request' in query) {
         const request = getChapiCredentialRequest(query);
 
-        const stateForExchangeCredentials = (request: ChapiCredentialRequest) => deepLinkNavigate('ExchangeCredentialsNavigation', {
+        const stateForExchangeCredentials = (request: VcApiCredentialRequest) => deepLinkNavigate('ExchangeCredentialsNavigation', {
           screen: 'ExchangeCredentials',
           params: { request }
         });

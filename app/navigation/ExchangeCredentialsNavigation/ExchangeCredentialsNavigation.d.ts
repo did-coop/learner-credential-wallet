@@ -1,8 +1,8 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import { ChapiCredentialRequest } from '../../types/chapi';
+import { VcApiCredentialRequest } from '../../types/chapi';
 
 export type ExchangeCredentialsNavigationParamList = {
-  ExchangeCredentials: { request: ChapiCredentialRequest; };
+  ExchangeCredentials: { request: VcApiCredentialRequest; };
 };
 
 export type ExchangeCredentialsProps = StackScreenProps<ExchangeCredentialsNavigationParamList, 'ExchangeCredentials'>;

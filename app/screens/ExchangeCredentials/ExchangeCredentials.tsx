@@ -1,15 +1,12 @@
 import React, { useLayoutEffect, useState, useRef }from 'react';
 import { Text } from 'react-native-elements';
 import { AppState } from 'react-native';
-// import '@digitalcredentials/data-integrity-rn';
-import { Ed25519Signature2020 } from '@digitalcredentials/ed25519-signature-2020';
-import { Ed25519VerificationKey2020 } from '@digitalcredentials/ed25519-verification-key-2020';
 import { ConfirmModal } from '../../components';
 import { useAppDispatch, useDynamicStyles } from '../../hooks';
 import { navigationRef } from '../../navigation';
 import { makeSelectDidFromProfile, selectWithFactory } from '../../store/selectorFactories';
 import { stageCredentials } from '../../store/slices/credentialFoyer';
-import { handleVcApiExchangeComplete } from '../../lib/exchanges';
+import {handleIncomingRequest, handleVcApiExchange} from '../../lib/exchanges';
 import { displayGlobalModal } from '../../lib/globalModal';
 import GlobalModalBody from '../../lib/globalModalBody';
 import { NavigationUtil } from '../../lib/navigationUtil';
@@ -25,7 +22,7 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
 
   const [coldStart, setColdStart] = useState(true);
   const appState = useRef(AppState.currentState);
-   
+
   useLayoutEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       //use AppState to determine if app is cold launched or not
@@ -49,21 +46,15 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
     body: <GlobalModalBody message='You have successfully delivered credentials to the organization.' />
   };
 
+  /**
+   * Called when user confirms Yes to the 'Exchange Credentials' modal below
+   */
   const acceptExchange = async () => {
     setColdStart(false);
     const rawProfileRecord = await NavigationUtil.selectProfile();
     const didRecord = selectWithFactory(makeSelectDidFromProfile, { rawProfileRecord });
-    const holder = didRecord?.didDocument.authentication[0].split('#')[0] as string;
-    const key = await Ed25519VerificationKey2020.from(didRecord?.verificationKey);
-    const suite = new Ed25519Signature2020({ key });
-    const url = request.protocols.vcapi as string;
-    console.log('CHAPI: Sending initial {} request to:', url);
-    const response = await handleVcApiExchangeComplete({
-      url,
-      holder,
-      suite,
-      interactive: true
-    });
+
+    const response = handleIncomingRequest({ request, selectedDidRecord: didRecord });
     console.log('Response:', JSON.stringify(response, null, 2));
 
     const credentialField = response.verifiablePresentation?.verifiableCredential;
@@ -90,7 +81,7 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
           screen: 'HomeScreen',
         },
       });
-    }   
+    }
   };
 
   const rejectExchange = () => {

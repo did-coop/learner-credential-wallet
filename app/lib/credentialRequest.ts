@@ -1,4 +1,4 @@
-import { ChapiCredentialRequest, ChapiCredentialRequestParams } from '../types/chapi';
+import { VcApiCredentialRequest, ChapiCredentialRequestParams } from '../types/chapi';
 import { Credential } from '../types/credential';
 import { DidRecordRaw } from '../model';
 
@@ -19,7 +19,7 @@ export function isCredentialRequestParams(params?: Record<string, unknown>): par
   return issuer !== undefined && vc_request_url !== undefined;
 }
 
-export function getChapiCredentialRequest(params: Record<string, unknown>): ChapiCredentialRequest {
+export function getChapiCredentialRequest(params: Record<string, unknown>): VcApiCredentialRequest {
   const { request: requestString } = (params as ChapiCredentialRequestParams);
   if (!requestString) {
     throw new Error('[getChapiCredentialRequest] Deep link does not contain "request" param.');
@@ -41,8 +41,8 @@ export function isChapiCredentialRequestParams(params: Record<string, unknown>):
   return isChapiCredentialRequest(request);
 }
 
-export function isChapiCredentialRequest(request: any): request is ChapiCredentialRequest {
-  const { credentialRequestOrigin, protocols } = (request || {} as ChapiCredentialRequest);
+export function isChapiCredentialRequest(request: any): request is VcApiCredentialRequest {
+  const { credentialRequestOrigin, protocols } = (request || {} as VcApiCredentialRequest);
 
   const hasChapiCredentialRequestFields = credentialRequestOrigin !== undefined && protocols !== undefined;
   if (!hasChapiCredentialRequestFields) {
