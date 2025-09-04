@@ -6,7 +6,7 @@ import { useAppDispatch, useDynamicStyles } from '../../hooks';
 import { navigationRef } from '../../navigation';
 import { makeSelectDidFromProfile, selectWithFactory } from '../../store/selectorFactories';
 import { stageCredentials } from '../../store/slices/credentialFoyer';
-import {handleIncomingRequest, handleVcApiExchange} from '../../lib/exchanges';
+import {processIncomingRequest, handleVcApiExchange} from '../../lib/exchanges';
 import { displayGlobalModal } from '../../lib/globalModal';
 import GlobalModalBody from '../../lib/globalModalBody';
 import { NavigationUtil } from '../../lib/navigationUtil';
@@ -47,15 +47,15 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
   };
 
   /**
-   * Called when user confirms Yes to the 'Exchange Credentials' modal below
+   * Called when user confirms Yes to the 'Incoming Message' modal below
    */
   const acceptExchange = async () => {
     setColdStart(false);
     const rawProfileRecord = await NavigationUtil.selectProfile();
     const didRecord = selectWithFactory(makeSelectDidFromProfile, { rawProfileRecord });
 
-    const response = handleIncomingRequest({ request, selectedDidRecord: didRecord });
-    console.log('Response:', JSON.stringify(response, null, 2));
+    const response = processIncomingRequest({ request, selectedDidRecord: didRecord });
+    console.log('Response from handleIncomingRequest():', JSON.stringify(response, null, 2));
 
     const credentialField = response.verifiablePresentation?.verifiableCredential;
     const credentialFieldExists = !!credentialField;
@@ -104,7 +104,7 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
       onConfirm={acceptExchange}
       onCancel={rejectExchange}
       onRequestClose={() => {(!coldStart) && rejectExchange();}}
-      title="Exchange Credentials Request"
+      title="Incoming Message"
       confirmText="Yes"
       cancelText="No">
       <Text style={mixins.modalBodyText}>

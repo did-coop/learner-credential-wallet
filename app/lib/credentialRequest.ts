@@ -5,7 +5,6 @@ import { DidRecordRaw } from '../model';
 import { createVerifiablePresentation } from './present';
 import { parseResponseBody } from './parseResponse';
 import { extractCredentialsFrom, verifyVerifiableObject, VerifiableObject } from './verifiableObject';
-//import { RegistryClient } from '@digitalcredentials/issuer-registry-client';
 
 export type CredentialRequestParams = {
   auth_type?: string;
@@ -36,30 +35,6 @@ export function getChapiCredentialRequest(params: Record<string, unknown>): VcAp
   return request;
 }
 
-export function isChapiCredentialRequestParams(params: Record<string, unknown>): params is ChapiCredentialRequestParams {
-  const request = getChapiCredentialRequest(params);
-  return isChapiCredentialRequest(request);
-}
-
-export function isChapiCredentialRequest(request: any): request is VcApiCredentialRequest {
-  const { credentialRequestOrigin, protocols } = (request || {} as VcApiCredentialRequest);
-
-  const hasChapiCredentialRequestFields = credentialRequestOrigin !== undefined && protocols !== undefined;
-  if (!hasChapiCredentialRequestFields) {
-    return false;
-  }
-
-  const hasChapiCredentialRequestProtocolFields = [
-    'OID4VCI',
-    'OID4VP',
-    'vcapi'
-  ].some((field: string) => {
-    return !!protocols[field];
-  });
-
-  return hasChapiCredentialRequestProtocolFields;
-}
-
 export async function requestCredential(
   credentialRequestParams: CredentialRequestParams, didRecord: DidRecordRaw
 ): Promise<Credential[]> {
@@ -69,7 +44,7 @@ export async function requestCredential(
     challenge,
   } = credentialRequestParams;
 
-  console.log('Credential request params', credentialRequestParams);
+  console.log('[requestCredential] Credential request params', credentialRequestParams);
 
   let accessToken;
 

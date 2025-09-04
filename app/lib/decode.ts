@@ -1,12 +1,11 @@
-// import '@digitalcredentials/data-integrity-rn';
 import { fromQrCode, toQrCode } from '@digitalcredentials/vpqr';
 import qs from 'query-string';
 
 import { securityLoader } from '@digitalcredentials/security-document-loader';
-import { VcApiCredentialRequest, ChapiCredentialResponse, ChapiDidAuthRequest } from '../types/chapi';
+import { ChapiCredentialResponse, ChapiDidAuthRequest } from '../types/chapi';
 import type { Credential, EducationalOperationalCredential, Subject } from '../types/credential';
 import { VerifiablePresentation } from '../types/presentation';
-import { CredentialRequestParams, getChapiCredentialRequest, isChapiCredentialRequestParams } from './credentialRequest';
+import { CredentialRequestParams } from './credentialRequest';
 import { isCredentialRequestParams } from './credentialRequest';
 import { HumanReadableError } from './error';
 import { isChapiCredentialResponse, isChapiDidAuthRequest, isVerifiableCredential, isVerifiablePresentation } from './verifiableObject';
@@ -25,25 +24,6 @@ export const regexPattern = {
 
 export function isDeepLink(text: string): boolean {
   return text.startsWith(LinkConfig.schemes.universalAppLink) || !!LinkConfig.schemes.customProtocol.find((link) => text.startsWith(link));
-}
-
-export function queryParamsFrom(url: string): Record<string, unknown> {
-  const { query } = qs.parseUrl(url);
-  return query;
-}
-
-export function credentialRequestFromChapiUrl(url: string): VcApiCredentialRequest {
-  const params = qs.parse(url.split('?')[1]);
-
-  const request = getChapiCredentialRequest(params);
-  console.log('Incoming request:', JSON.stringify(request, null, 2));
-
-  // const isValid = isChapiCredentialRequestParams(params);
-  // if (!isValid) {
-  //   throw new HumanReadableError('[credentialRequestFromChapiUrl] The credential request was malformed.');
-  // }
-  // return getChapiCredentialRequest(params);
-  return request;
 }
 
 export function credentialRequestParamsFromQrText(text: string): CredentialRequestParams {

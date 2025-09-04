@@ -209,7 +209,7 @@ export async function fetchVprFromExchange ({
  * @param request
  * @param selectedDidRecord
  */
-export async function handleIncomingRequest (
+export async function processIncomingRequest (
   { request, selectedDidRecord }:
   { request: VcApiCredentialRequest, selectedDidRecord: DidRecordRaw }
 ): Promise<ExchangeResponse> {
