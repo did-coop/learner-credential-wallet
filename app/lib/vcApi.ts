@@ -56,7 +56,8 @@ export function parseWalletApiUrl ({ url }: { url: string }): object | undefined
   try {
     messageObject = JSON.parse(decodeURI(messageText as string));
   } catch (err) {
-    console.log(`Error parsing incoming wallet API message: "${messageText}"`);
+    console.log(`Error parsing incoming wallet API message: "${messageText}"`,
+      err);
     return;
   }
   return messageObject;
@@ -104,7 +105,7 @@ export type IIssueRequest = {
  */
 export type IVpOffer = {
   credentialRequestOrigin?: string;
-  verifiablePresentation: IVerifiablePresentation | IVerifiablePresentation[];
+  verifiablePresentation: IVerifiablePresentation;
 }
 
 /**
@@ -121,12 +122,14 @@ export type IOid4VCIOffer = {
  */
 export type IVpRequest = {
   credentialRequestOrigin?: string;
-  verifiablePresentationRequest: {
-    interact?: IInteractMethod | IInteractMethod[];
-    query?: IVprQuery | IVprQuery[];
-    challenge?: string;
-    domain?: string
-  }
+  verifiablePresentationRequest: IVprDetails;
+}
+
+export type IVprDetails = {
+  interact?: IInteractMethod | IInteractMethod[];
+  query?: IVprQuery | IVprQuery[];
+  challenge?: string;
+  domain?: string;
 }
 
 export type IVprQuery = IQueryByExample
@@ -171,4 +174,16 @@ export type IZcapQuery = {
     invocationTarget: string | object | Array<string | object>;
   };
   challenge?: string;
+}
+
+export type IZcap = {
+  "@context"?: string | object | Array<string | object>;
+  id: `urn:zcap:${string}`;
+  controller: string | string[];
+  invocationTarget: string | object | Array<string | object>;
+  referenceId?: string;
+  allowedAction?: string | object | Array<string | object>;
+  parentCapability?: string | Array<string | object>;
+  expires?: string;
+  proof: any;
 }

@@ -5,7 +5,7 @@ import { securityLoader } from '@digitalcredentials/security-document-loader';
 import { ObjectId } from 'bson';
 import store from '../store';
 import validator from 'validator';
-import { CredentialRecord, DidRecord, DidRecordRaw } from '../model';
+import { CredentialRecord, DidRecordRaw } from '../model';
 import { navigationRef } from '../navigation';
 import { clearSelectedExchangeCredentials, selectExchangeCredentials } from '../store/slices/credentialFoyer';
 import { Credential, CredentialRecordRaw, VcQueryType } from '../types/credential';
@@ -17,25 +17,34 @@ import { filterCredentialRecordsByType } from './credentialMatching';
 import handleZcapRequest from './handleZcapRequest';
 import { VcApiCredentialRequest } from '../types/chapi';
 import { Ed25519VerificationKey2020 } from '@digitalcredentials/ed25519-verification-key-2020';
-import {HumanReadableError} from './error';
-import { IVerifiableCredential, IZcap } from '@digitalcredentials/ssi';
+import { HumanReadableError } from './error';
+import { ISigner, IVerifiableCredential, IVerifiablePresentation } from '@digitalcredentials/ssi';
+import { IQueryByExample, IVpOffer, IVprDetails, IVpRequest, IZcap } from './vcApi';
+import { extractCredentialsFrom } from './verifiableObject';
 
 const MAX_INTERACTIONS = 10;
 
-// Interact with VC-API exchange
-async function postToExchange (url: string, request: any): Promise<any> {
-  const exchangeResponseRaw = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(request)
-  });
-  return exchangeResponseRaw.json();
+/**
+ * Posts the initial {} body to the Exchanger endpoint to start an exchange
+ * @param url
+ * @param request
+ */
+export async function startExchange ({ url }: { url: string }): Promise<any> {
+  try {
+    const exchangeResponseRaw = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    return exchangeResponseRaw.json();
+  } catch (err) {
+    console.log(`Error on initial POST {} to endpoint "${url}".`);
+    throw err;
+  }
 }
 
-// Select credentials to exchange with issuer or verifier
-const selectCredentials = async (credentialRecords: CredentialRecordRaw[]): Promise<CredentialRecordRaw[]> => {
+// Selects credentials to exchange with issuer or verifier
+export async function selectCredentials (credentialRecords: CredentialRecordRaw[]): Promise<CredentialRecordRaw[]> => {
   // ensure that the selected credentials have been cleared
   // before subscribing to redux store updates below
   store.dispatch(clearSelectedExchangeCredentials());
@@ -190,16 +199,82 @@ type HandleVcApiExchangeParameters = {
   interactive?: boolean;
 };
 
-export async function fetchVprFromExchange ({
-  url, request, interactions = 0
-}: { url: string, request: any, interactions?: number }): Promise<any> {
+type IResponseToExchanger = {
+  verifiablePresentation?: VerifiablePresentation;
+  zcap?: IZcap | IZcap[];
+}
+
+/**
+ * Recursively processes one or more VC API exchange messages.
+ * If necessary, prompt the user to select which VCs to send.
+ *
+ * @param requestOrOffer - Exchange message to process.
+ * @param selectedDidRecord - In case DIDAuthentication is required.
+ * @param rootZcapSigner - In case zCaps are requested.
+ * @param [interactions=0] {number} - Prevents infinite request loops.
+ */
+export async function processMessageChain (
+  { requestOrOffer, selectedDidRecord, rootZcapSigner, interactions = 0 }:
+  { requestOrOffer: IVpRequest | IVpOffer,
+    selectedDidRecord: DidRecordRaw, rootZcapSigner: ISigner, interactions?: number }
+): Promise<{ acceptCredentials?: IVerifiableCredential[] }> {
+  // Classify the message
+  let request, offer;
+  if ('verifiablePresentation' in requestOrOffer) {
+    offer = requestOrOffer.verifiablePresentation as IVerifiablePresentation;
+  } else {
+    request = requestOrOffer.verifiablePresentationRequest as IVprDetails;
+  }
+
+  // Check to see if this is an offer, if it is, return and finish
+  if (offer) {
+    return { acceptCredentials: extractCredentialsFrom(offer)! }
+  }
   if (interactions === MAX_INTERACTIONS) {
     throw new Error(`Request timed out after ${interactions} interactions`);
   }
-  const exchangeResponse = await postToExchange(url, request);
-  console.log('Initial exchange response:', JSON.stringify(exchangeResponse, null, 2));
+  // Check to see if 'interact' property is present (nothing to do if not there)
+  if (!request?.interact) {
+    console.log('[processMessageChain] No "interact" property, ending exchange.');
+    return {};
+  }
 
-  return exchangeResponse;
+  // Process the queries (assemble and confirm credentials, delegate zcaps)
+  const { query } = request!;
+  const queries = Array.isArray(query) ? query : [query];
+
+  const { credentials, zcaps } = await processRequestQueries({ queries, rootZcapSigner });
+
+  if (credentials.length > 0) {
+    // Prompt user to confirm / select which VCs to send
+    const selectedVcs = (await selectCredentials(credentials))
+      .map((r) => r.credential);
+  }
+
+  const response: IResponseToExchanger = {};
+  if (zcaps.length > 0) {
+    response.zcap = zcaps;
+  }
+  // Compose a VerifiablePresentation (to send to the requester) if appropriate
+
+  // const vpToSend = ...
+  // if (isDidAuthenticationRequested(queries)) {
+  //   signVp( selectedDidRecord )
+  // }
+
+  // if (vpToSend) {
+  //   response.verifiablePresentation = vpToSend;
+  // }
+
+  // const responseFromExchanger = await sendToExchanger({ interactUrl, response });
+  // if (responseFromExchanger) {
+  //   return processMessageChain (
+  //     { requestOrOffer: responseFromExchanger, selectedDidRecord,
+  //       rootZcapSigner, interactions: interactions + 1 });
+  // }
+
+  // No further requests from exchanger, end exchange
+  return {};
 }
 
 /**
@@ -213,57 +288,6 @@ export async function processIncomingRequest (
   { request, selectedDidRecord }:
   { request: VcApiCredentialRequest, selectedDidRecord: DidRecordRaw }
 ): Promise<ExchangeResponse> {
-  /**
-   * Example request shapes:
-   * { credentialRequestOrigin, protocols }
-   * { verifiablePresentationRequest: { interact, query } }
-   * { issueRequest: { interact, credential } }
-   */
-  const { credentialRequestOrigin, protocols,
-    verifiablePresentationRequest, issueRequest } = request;
-
-  console.log('credentialRequestOrigin (self-asserted):', credentialRequestOrigin);
-
-  if (issueRequest) {
-    // Short circuit unsupported request
-    throw new HumanReadableError('Issue/signing requests not supported yet.');
-  }
-
-  /**
-   * Get the VPR either directly (from 'verifiablePresentationRequest' property),
-   * or indirectly from a remote source (via the 'protocols' property).
-   */
-  let vpr;
-  if (protocols) {
-    if (!protocols.vcapi) {
-      throw new HumanReadableError('Only the "vcapi" protocol is currently supported.');
-    }
-    const { vcapi: url} = protocols
-    // Start the exchange process - POST an empty {} to the exchange API url
-    console.log('CHAPI: Sending initial {} request to:', url);
-    vpr = (await fetchVprFromExchange({ url, request: {} })).verifiablePresentationRequest;
-  } else {
-    // VPR was provided directly
-    vpr = verifiablePresentationRequest;
-  }
-
-  const { query, challenge, domain, interact } = vpr;
-
-  const queries = Array.isArray(query) ? query : [query];
-  const { credentials, zcaps } = await processRequestQueries({ queries });
-
-  if (interactive && credentials.length > 0) {
-    const credentialRecords = await selectCredentials(filteredCredentialRecords);
-    credentials = credentialRecords.map((r) => r.credential);
-  }
-
-  if (credentials.length > 0) {
-    queryResult.verifiableCredential = vcs;
-  }
-  if (zcaps.length > 0) {
-    queryResult.zcap = zcaps;
-  }
-
   // Later, determine if DIDAuth is needed
 
   const holder = selectedDidRecord?.didDocument.authentication[0].split('#')[0] as string;
@@ -282,15 +306,15 @@ export async function processIncomingRequest (
 }
 
 export type TQueryResult = {
-  credentials: IVerifiableCredential[]
+  credentials: CredentialRecordRaw[]
   zcaps: IZcap[]
 }
 
 export async function processRequestQueries(
-  { queries, selectedDidRecord }:
-    { queries: any[], selectedDidRecord: DidRecordRaw }
+  { queries, rootZcapSigner }:
+    { queries: any[], rootZcapSigner: ISigner }
 ): Promise<TQueryResult> {
-  const vcs: IVerifiableCredential[] = [];
+  const vcs: CredentialRecordRaw[] = [];
   const zcaps: IZcap[] = [];
 
   for (const query of queries) {
@@ -300,7 +324,7 @@ export async function processRequestQueries(
       vcs.concat(await processQueryByExample({ query }));
       break;
     case VcQueryType.ZcapQuery:
-      zcaps.push(await delegateZcap({ query, selectedDidRecord }));
+      zcaps.push(await delegateZcap({ query, rootZcapSigner }));
       break;
     default:
       throw new HumanReadableError(`Unsupported query type: "${query.type}"`)
@@ -309,14 +333,12 @@ export async function processRequestQueries(
   return { credentials: vcs, zcaps };
 }
 
-export async function processQueryByExample({ query }): Promise<IVerifiableCredential[]> {
+export async function processQueryByExample({ query }: { query: IQueryByExample }): Promise<CredentialRecordRaw[]> {
   const allRecords = await CredentialRecord.getAllCredentialRecords();
-  const filteredCredentialRecords: CredentialRecordRaw[] =
-    filterCredentialRecordsByType(allRecords, query);
-  return filteredCredentialRecords.map((r) => r.credential);
+  return filterCredentialRecordsByType(allRecords, query);
 }
 
-export async function delegateZcap({ query, selectedDidRecord }): Promise<IZcap> {
+export async function delegateZcap({ query, rootZcapSigner }): Promise<IZcap> {
 
 }
 
@@ -379,7 +401,7 @@ export async function handleVcApiExchange ({
         throw new Error('Missing serviceEndpoint in VPR interact.');
       }
 
-      const finalResponse = await postToExchange(interactUrl, vp);
+      const finalResponse = await startExchange(interactUrl, vp);
       return finalResponse;
     }
     default: {

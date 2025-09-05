@@ -3,6 +3,7 @@ import Crypto from 'react-native-quick-crypto';
 
 import { Credential, CredentialRecordEntry, CredentialRecordRaw } from '../types/credential';
 import { db } from './DatabaseAccess';
+import { IVerifiableCredential } from '@digitalcredentials/ssi';
 
 const ObjectId = Realm.BSON.ObjectId;
 type ObjectId = Realm.BSON.ObjectId;
@@ -98,6 +99,6 @@ export class CredentialRecord extends Realm.Object implements CredentialRecordRa
 }
 
 export type AddCredentialRecordParams = {
-  credential: Credential;
+  credential: IVerifiableCredential;
   profileRecordId: ObjectId;
 };

@@ -6,7 +6,7 @@ import { VcApiCredentialRequest } from '../types/chapi';
 import { encodeQueryParams } from './encode';
 
 import { LinkConfig } from '../../app.config';
-import { parseWalletApiMessage, parseWalletApiUrl } from './vcApi';
+import { parseWalletApiMessage, parseWalletApiUrl, WalletApiMessage } from './vcApi';
 
 const DEEP_LINK_SCHEMES = LinkConfig.schemes.customProtocol
   .concat(LinkConfig.schemes.universalAppLink);
@@ -69,17 +69,17 @@ export const deepLinkConfig = {
       console.log('[redirectRequestRoute] No wallet api message found in url.');
       return;
     }
-    const request = parseWalletApiMessage({ messageObject });
-    if (request === undefined) {
+    const message = parseWalletApiMessage({ messageObject });
+    if (message === undefined) {
       console.log('[redirectRequestRoute] Wallet api message not recognized.');
       return;
     }
     const stateForExchangeCredentials =
-      (request: VcApiCredentialRequest) => deepLinkNavigate('ExchangeCredentialsNavigation', {
+      (message: WalletApiMessage) => deepLinkNavigate('ExchangeCredentialsNavigation', {
         screen: 'ExchangeCredentials',
-        params: { request }
+        params: { message }
       });
-    return stateForExchangeCredentials(request);
+    return stateForExchangeCredentials(message);
   }
 };
 
@@ -93,14 +93,14 @@ const redirectRequestRoute = (url: string) => {
     console.log('[redirectRequestRoute] No wallet api message found in url.');
     return;
   }
-  const request = parseWalletApiMessage({ messageObject });
-  if (request === undefined) {
+  const message = parseWalletApiMessage({ messageObject });
+  if (message === undefined) {
     console.log('[redirectRequestRoute] Wallet api message not recognized.');
     return;
   }
   navigationRef.navigate('ExchangeCredentialsNavigation', {
     screen: 'ExchangeCredentials',
-    params: { request }
+    params: { message }
   });
 };
 

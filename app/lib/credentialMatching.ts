@@ -1,5 +1,6 @@
 import { JSONPath } from 'jsonpath-plus';
 import { CredentialRecordRaw, VcQueryType } from '../types/credential';
+import { IQueryByExample } from './vcApi';
 
 // Check if credential record matches QueryByExample VPR
 export function credentialMatchesVprExampleQuery (
@@ -50,7 +51,7 @@ function extendPath (path: string, extension: string): string {
 
 // Filter credential records by type
 export function filterCredentialRecordsByType (
-  allRecords: CredentialRecordRaw[], query: { type: VcQueryType; credentialQuery?: any }
+  allRecords: CredentialRecordRaw[], query: IQueryByExample
 ): CredentialRecordRaw[] {
   let matchedCredentialRecords: CredentialRecordRaw[];
   switch (query.type) {

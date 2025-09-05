@@ -6,16 +6,18 @@ import { useAppDispatch, useDynamicStyles } from '../../hooks';
 import { navigationRef } from '../../navigation';
 import { makeSelectDidFromProfile, selectWithFactory } from '../../store/selectorFactories';
 import { stageCredentials } from '../../store/slices/credentialFoyer';
-import {processIncomingRequest, handleVcApiExchange} from '../../lib/exchanges';
+import { processIncomingRequest, handleVcApiExchange, startExchange, processMessageChain } from '../../lib/exchanges';
 import { displayGlobalModal } from '../../lib/globalModal';
 import GlobalModalBody from '../../lib/globalModalBody';
 import { NavigationUtil } from '../../lib/navigationUtil';
 import { delay } from '../../lib/time';
 import { ExchangeCredentialsProps } from './ExchangeCredentials.d';
+import { HumanReadableError } from '../../lib/error';
+import { getRootSigner } from '../../lib/getRootSigner';
 
 export default function ExchangeCredentials({ route }: ExchangeCredentialsProps): React.ReactElement {
   const { params } = route;
-  const { request } = params;
+  const { message } = params;
 
   const dispatch = useAppDispatch();
   const { mixins } = useDynamicStyles();
@@ -47,24 +49,60 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
   };
 
   /**
-   * Called when user confirms Yes to the 'Incoming Message' modal below
+   * Called when user confirms Yes to the 'Incoming Message' modal below.
+   * Param (from above):
+   * - message {WalletApiMessage} - an offer or a request, see below
+   *
+   * Example offer shape:
+   * { verifiablePresentation }
+   *
+   * Example request shapes:
+   * { credentialRequestOrigin, protocols }
+   * { verifiablePresentationRequest: { interact, query } }
+   * { issueRequest: { interact, credential } }
    */
   const acceptExchange = async () => {
     setColdStart(false);
+    // Short circuit unsupported IssueRequest
+    if ('issueRequest' in message) {
+      throw new HumanReadableError('Issue/signing requests not supported yet.');
+    }
+
+    const { credentialRequestOrigin } = message;
+    console.log('[acceptExchange] credentialRequestOrigin (self-asserted):',
+      credentialRequestOrigin);
+
+    let requestOrOffer;
+    // If this is an Exchange Invitation, send the initial POST {}
+    //   to get back either a request or an offer
+    if ('protocols' in message) {
+      const url = message.protocols?.vcapi;
+      if (url === undefined) {
+        throw new HumanReadableError('Only the "vcapi" protocol is supported currently.');
+      }
+      const initialResponse = await startExchange({ url });
+      console.log('Initial exchange response:',
+        JSON.stringify(initialResponse, null, 2));
+      requestOrOffer = initialResponse;
+    } else {
+      requestOrOffer = message;
+    }
+
+    // Regardless if request is an offer or a request, select profile
     const rawProfileRecord = await NavigationUtil.selectProfile();
-    const didRecord = selectWithFactory(makeSelectDidFromProfile, { rawProfileRecord });
+    const selectedDidRecord = selectWithFactory(makeSelectDidFromProfile, { rawProfileRecord });
+    const rootZcapSigner = await getRootSigner();
 
-    const response = processIncomingRequest({ request, selectedDidRecord: didRecord });
-    console.log('Response from handleIncomingRequest():', JSON.stringify(response, null, 2));
+    // Recursively process exchanges until either:
+    //  1) we're issued some credentials, or
+    //  2) the exchange ends (we've sent off all requested items)
+    const { acceptCredentials } = await processMessageChain(
+      { requestOrOffer, selectedDidRecord, rootZcapSigner });
 
-    const credentialField = response.verifiablePresentation?.verifiableCredential;
-    const credentialFieldExists = !!credentialField;
-    const credentialFieldIsArray = Array.isArray(credentialField);
-    const credentialAvailable = credentialFieldExists && credentialFieldIsArray && credentialField.length > 0;
-
-    if (credentialAvailable && navigationRef.isReady()) {
-      const credential = credentialField[0];
-      await dispatch(stageCredentials([credential]));
+    // We've been issued some credentials - present to user for accepting
+    if (acceptCredentials && navigationRef.isReady()) {
+      console.log('[acceptExchange] Accepting credentials:', acceptCredentials);
+      await dispatch(stageCredentials(acceptCredentials));
       await delay(500);
       navigationRef.navigate('AcceptCredentialsNavigation', {
         screen: 'ApproveCredentialsScreen',
@@ -73,13 +111,13 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
         }
       });
     } else {
-      console.log('Credential not available.');
+      console.log('[acceptExchange] Exchanges completed.');
       displayGlobalModal(dataLoadingSuccessModalState);
       navigationRef.navigate('HomeNavigation', {
         screen: 'CredentialNavigation',
         params: {
           screen: 'HomeScreen',
-        },
+        }
       });
     }
   };

@@ -32,8 +32,6 @@ export default async function handleZcapRequest({
     throw new Error('User denied Zcap delegation');
   }
 
-
-
   const invocationTargetType = typeof invocationTarget === 'string' ? invocationTarget : invocationTarget.type;
 
   const rootSigner = await getRootSigner();
