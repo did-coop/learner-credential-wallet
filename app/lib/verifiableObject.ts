@@ -5,12 +5,13 @@ import { VerifiablePresentation } from '../types/presentation';
 import { ResultLog, verifyCredential, verifyPresentation } from './validate';
 import { RegistryClient } from '@digitalcredentials/issuer-registry-client';
 import { CredentialRecordRaw } from '../model';
+import { IVerifiableCredential, IVerifiablePresentation } from '@digitalcredentials/ssi';
 
 /**
  * This type is used to identify a request response that could be a
  * Verifiable Credential or Verifiable Presentation.
  */
-export type VerifiableObject = Credential | VerifiablePresentation;
+export type VerifiableObject = IVerifiableCredential | IVerifiablePresentation;
 
 export function isVerifiableCredential(obj: VerifiableObject): obj is Credential {
   return obj.type?.includes('VerifiableCredential');
@@ -45,15 +46,15 @@ export async function verifyVerifiableObject(
   return false;
 }
 
-export function extractCredentialsFrom(obj: VerifiableObject): Credential[] | null {
+export function extractCredentialsFrom(obj: IVerifiableCredential | IVerifiablePresentation):
+  IVerifiableCredential[] | null {
   if (isVerifiableCredential(obj)) {
     return [obj];
   }
-
   if (isVerifiablePresentation(obj)) {
     const { verifiableCredential } = obj;
 
-    if (verifiableCredential instanceof Array) {
+    if (Array.isArray(verifiableCredential)) {
       return verifiableCredential;
     }
     return [verifiableCredential];
