@@ -6,7 +6,7 @@ import { useAppDispatch, useDynamicStyles } from '../../hooks';
 import { navigationRef } from '../../navigation';
 import { makeSelectDidFromProfile, selectWithFactory } from '../../store/selectorFactories';
 import { stageCredentials } from '../../store/slices/credentialFoyer';
-import { processIncomingRequest, handleVcApiExchange, startExchange, processMessageChain } from '../../lib/exchanges';
+import { startExchange, processMessageChain } from '../../lib/exchanges';
 import { displayGlobalModal } from '../../lib/globalModal';
 import GlobalModalBody from '../../lib/globalModalBody';
 import { NavigationUtil } from '../../lib/navigationUtil';
@@ -14,6 +14,7 @@ import { delay } from '../../lib/time';
 import { ExchangeCredentialsProps } from './ExchangeCredentials.d';
 import { HumanReadableError } from '../../lib/error';
 import { getRootSigner } from '../../lib/getRootSigner';
+import { CredentialRecord } from '../../model';
 
 export default function ExchangeCredentials({ route }: ExchangeCredentialsProps): React.ReactElement {
   const { params } = route;
@@ -92,12 +93,13 @@ export default function ExchangeCredentials({ route }: ExchangeCredentialsProps)
     const rawProfileRecord = await NavigationUtil.selectProfile();
     const selectedDidRecord = selectWithFactory(makeSelectDidFromProfile, { rawProfileRecord });
     const rootZcapSigner = await getRootSigner();
+    const loadCredentials = CredentialRecord.getAllCredentialRecords;
 
     // Recursively process exchanges until either:
     //  1) we're issued some credentials, or
     //  2) the exchange ends (we've sent off all requested items)
     const { acceptCredentials } = await processMessageChain(
-      { requestOrOffer, selectedDidRecord, rootZcapSigner });
+      { requestOrOffer, selectedDidRecord, rootZcapSigner, loadCredentials });
 
     // We've been issued some credentials - present to user for accepting
     if (acceptCredentials && navigationRef.isReady()) {
