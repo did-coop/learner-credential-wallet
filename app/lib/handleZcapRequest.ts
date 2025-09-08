@@ -1,7 +1,8 @@
-import { ZCAP_EXPIRES } from '../../app.config';
+import { ZCAP_EXPIRES, WAS } from '../../app.config';
 // @ts-ignore
 import { ZcapClient } from '@digitalcredentials/ezcap';
 import { Ed25519Signature2020 } from '@digitalcredentials/ed25519-signature-2020';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { displayGlobalModal } from './globalModal';
 import { getRootSigner } from './getRootSigner';
@@ -48,28 +49,37 @@ export default async function handleZcapRequest({
     throw new Error('User denied Zcap delegation');
   }
 
+  let rootSigner
+  try {
+    rootSigner = await getRootSigner();
+  } catch (error) {
+    throw new Error(`Error getting root signer: ${error}`);
+  }
 
-
-  const invocationTargetType = typeof invocationTarget === 'string' ? invocationTarget : invocationTarget.type;
-
-  const rootSigner = await getRootSigner();
-
-  const parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTargetType)}`;
+  // Get stored space UUID
+  const storedSpaceUUID = await AsyncStorage.getItem(WAS.KEYS.SPACE_ID);
+  if (!storedSpaceUUID) {
+    throw new Error('No stored space ID found for WAS delegation');
+  }
 
   const zcapClient = new ZcapClient({
     SuiteClass: Ed25519Signature2020,
-    delegationSigner: rootSigner
+    delegationSigner: rootSigner,
   });
+
+  const invocationTargetUrl = new URL(`/space/${storedSpaceUUID}`, WAS.BASE_URL).toString();
+
+  const allowedActions = ['GET', 'POST', 'PUT', 'DELETE'];
+
+  const parentCapability = `urn:zcap:root:${encodeURIComponent(invocationTargetUrl)}`;
 
   const delegatedZcap = await zcapClient.delegate({
     capability: parentCapability,
     controller,
-    invocationTarget: invocationTargetType,
-    allowedActions: allowedAction,
-    expires: ZCAP_EXPIRES.toISOString()
+    invocationTarget: invocationTargetUrl,
+    allowedActions,
+    expires: ZCAP_EXPIRES.toISOString(),
   });
 
-  return {
-    zcap: delegatedZcap
-  };
+  return { zcap: delegatedZcap };
 }
