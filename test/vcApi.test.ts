@@ -14,7 +14,7 @@ jest.mock('../app/lib/selectCredentials.ts', () => ({
   selectCredentials: jest.fn()
 }));
 
-describe('vcApi', () => {
+describe.only('vcApi', () => {
   describe('Parsing', () => {
     it('parses an IExchangeInvitation url', () => {
       const url = 'dccrequest://?request=%7B%22credentialRequest' +
@@ -52,7 +52,7 @@ describe('vcApi', () => {
     })
   })
 
-  describe.only('processMessageChain()', () => {
+  describe('processMessageChain()', () => {
     it('should process a VP Request', async () => {
       // const message: IVpRequest = {
       //   verifiablePresentationRequest: {
