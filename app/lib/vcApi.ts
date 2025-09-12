@@ -127,7 +127,7 @@ export type IVpRequest = {
 
 export type IVprDetails = {
   interact?: IInteractMethod | IInteractMethod[];
-  query?: IVprQuery | IVprQuery[];
+  query: IVprQuery | IVprQuery[];
   challenge?: string;
   domain?: string;
 }

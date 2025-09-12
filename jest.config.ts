@@ -8,6 +8,7 @@ const packagesToTransformWithBabel = [
   'react-native-fs',
   'base58-universal',
   'base64url-universal',
+  '@interop/*',
   '@digitalcredentials/*',
   'realm',
   '@realm', // <-- critical for @realm/fetch

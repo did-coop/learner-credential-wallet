@@ -8,7 +8,7 @@ import { VerifiablePresentation } from '../types/presentation';
 import { filterCredentialRecordsByType } from './credentialMatching';
 import { HumanReadableError } from './error';
 import { ISigner, IVerifiableCredential, IVerifiablePresentation } from '@digitalcredentials/ssi';
-import { IVpOffer, IVprDetails, IVpRequest, IZcap } from './vcApi';
+import { IVpOffer, IVprDetails, IVpRequest, IVprQuery, IZcap } from './vcApi';
 import { extractCredentialsFrom } from './verifiableObject';
 import { selectCredentials } from './selectCredentials';
 
@@ -159,47 +159,75 @@ export async function processMessageChain (
   }
   // Check to see if 'interact' property is present (nothing to do if not there)
   if (!request?.interact) {
+    // Nowhere to send the response
     console.log('[processMessageChain] No "interact" property, ending exchange.');
     return {};
   }
 
   // Process the queries (assemble and confirm credentials, delegate zcaps)
-  const { query } = request!;
-  const queries = Array.isArray(query) ? query : [query];
+  const { credentials, zcaps, challenge, domain, didAuthRequested } =
+    await processRequestQueries({ request, rootZcapSigner, loadCredentials });
 
-  const { credentials, zcaps } = await processRequestQueries({
-    queries, rootZcapSigner, loadCredentials });
+  if (credentials.length === 0 && zcaps.length === 0) {
+    // No matches were found, nothing to send to requester
+    console.log(
+      '[processMessageChain] No zcaps or VCs matched request query, ending exchange.');
+    return {}
+    // TODO: At some point, we should probably inform the user that no matches were found
+  }
 
+  // We have zcap or VC matches, compose the response
+  const walletResponse: IResponseToExchanger = {};
+  // If any zcaps were requested (and matched the query), add them to response
+  if (zcaps.length > 0) {
+    walletResponse.zcap = zcaps;
+  }
+
+  let selectedVcs;
   if (credentials.length > 0 && confirmModalEnabled) {
     // Prompt user to confirm / select which VCs to send
-    const selectedVcs = (await selectCredentials(credentials))
+    selectedVcs = (await selectCredentials(credentials))
       .map((r) => r.credential);
+  } else {
+    // Not prompting the user
+    selectedVcs = credentials.map((r) => r.credential);
   }
 
-  const response: IResponseToExchanger = {};
-  if (zcaps.length > 0) {
-    response.zcap = zcaps;
-  }
   // Compose a VerifiablePresentation (to send to the requester) if appropriate
 
-  // const vpToSend = ...
-  // if (isDidAuthenticationRequested(queries)) {
-  //   signVp( selectedDidRecord )
-  // }
+  if (selectedVcs.length > 0) {
+    walletResponse.verifiablePresentation = await composeVp({
+      selectedDidRecord, selectedVcs, challenge, domain, didAuthRequested
+    })
+  }
 
-  // if (vpToSend) {
-  //   response.verifiablePresentation = vpToSend;
-  // }
 
-  // const responseFromExchanger = await sendToExchanger({ interactUrl, response });
-  // if (responseFromExchanger) {
-  //   return processMessageChain (
-  //     { requestOrOffer: responseFromExchanger, selectedDidRecord,
-  //       rootZcapSigner, interactions: interactions + 1 });
-  // }
+  const responseFromExchanger = await sendToExchanger({
+    interact: request.interact, response: walletResponse });
+
+  if (responseFromExchanger) {
+    return processMessageChain ({ requestOrOffer: responseFromExchanger,
+      selectedDidRecord, rootZcapSigner, interactions: interactions + 1,
+      loadCredentials });
+  }
 
   // No further requests from exchanger, end exchange
   return {};
+}
+
+export async function composeVp (
+  { selectedDidRecord, selectedVcs, challenge, domain, didAuthRequested }:
+  { selectedDidRecord?: DidRecordRaw, selectedVcs: IVerifiableCredential[],
+    challenge?: string, domain?: string, didAuthRequested: boolean }
+): Promise<VerifiablePresentation> {
+  const presentation = vc.createPresentation({
+    verifiableCredential: selectedVcs
+  });
+  if (selectedDidRecord && didAuthRequested) {
+    return signVp({ presentation, selectedDidRecord, challenge, domain });
+  }
+  // Return unsigned VP
+  return presentation;
 }
 
 /**
@@ -232,16 +260,32 @@ export async function processMessageChain (
 
 export type TQueryResult = {
   credentials: CredentialRecordRaw[]
-  zcaps: IZcap[]
+  zcaps: IZcap[],
+  challenge?: string,
+  domain?: string,
+  didAuthRequested: boolean
 }
 
 export async function processRequestQueries(
-  { queries, rootZcapSigner, loadCredentials }:
-  { queries: any[], rootZcapSigner?: ISigner,
+  { request, rootZcapSigner, loadCredentials }:
+  { request: IVprDetails, rootZcapSigner?: ISigner,
     loadCredentials: () => Promise<CredentialRecordRaw[]> }
 ): Promise<TQueryResult> {
   const vcs: CredentialRecordRaw[] = [];
   const zcaps: IZcap[] = [];
+
+  const queries = Array.isArray(request.query) ? request.query : [request.query];
+
+  let challenge, domain;
+  let didAuthRequested = false;
+  // If there's more than one DIDAuth request, fail
+  const didAuthRequests = queries.filter(q => q.type === 'DIDAuthentication');
+  if (didAuthRequests.length > 1) {
+    throw new HumanReadableError('More than one DIDAuthentication request found, exiting.');
+  } else if (didAuthRequests.length === 1) {
+    ({ challenge, domain } = request);
+    didAuthRequested = true;
+  }
 
   for (const query of queries) {
     console.log(`Processing query type "${query.type}"`);
@@ -258,7 +302,7 @@ export async function processRequestQueries(
       throw new HumanReadableError(`Unsupported query type: "${query.type}"`)
     }
   }
-  return { credentials: vcs, zcaps };
+  return { credentials: vcs, zcaps, challenge, domain, didAuthRequested };
 }
 
 // export async function delegateZcap({ query, rootZcapSigner }): Promise<void> {
