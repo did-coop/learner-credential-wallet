@@ -50,7 +50,7 @@ export default function AddScreen(): React.ReactElement {
     text = text.trim();
 
     if (isDeepLink(text)) {
-      const params = credentialRequestParamsFromQrText(text);
+      const para  ms = credentialRequestParamsFromQrText(text);
       goToCredentialFoyer(cleanCopy(params));
     } else {
       const credentials = await credentialsFrom(text);
