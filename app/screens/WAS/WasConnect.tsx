@@ -59,7 +59,21 @@ export default function WasConnectScreen() {
           } catch (error) {
             console.error('Connection failed:', error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            setStatusMessage(`Failed to connect wallet: ${errorMessage}`);
+            if (
+              typeof errorMessage === 'string' &&
+              (
+                errorMessage.includes('WAS is not enabled') ||
+                errorMessage.includes('Root signer not found in wallet') ||
+                errorMessage.includes('WAS connection required') ||
+                errorMessage.includes('Error getting root signer')
+              )
+            ) {
+              setStatusMessage(
+                'This request first requires you to set up a WAS connection. Go to the dev menu and enable "Connect to WAS".'
+              );
+            } else {
+              setStatusMessage(`Failed to connect wallet: ${errorMessage}`);
+            }
             setStatusType('error');
 
             if (navigationRef.isReady()) {
@@ -102,7 +116,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   statusText: {
-    marginTop: 20,
+    marginBottom: 20,
     fontSize: 16,
     textAlign: 'center',
   },
